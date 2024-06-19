@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+"""
+Convert AppleDouble files to MacBinary
+"""
 # Data Fork            1  Data fork
 # Resource Fork        2  Resource fork
 # Real Name            3  File’s name as created on home file system
@@ -13,147 +16,242 @@
 # Short Name          13  AFP short name
 # AFP File Info       14  AFP file information, attributes, and so on
 # Directory ID        15  AFP directory ID
+import argparse
 import os
 import re
 import struct
-import sys
 from binascii import crc_hqx
 from urllib import parse
 
 
-def file_to_macbin(datalen, rsrclen, crdate, mddate, type, creator, flags, name):
-    oldFlags = flags >> 8
-    newFlags = flags & 0xFF
-    macbin = struct.pack(">x64p4s4sBxHHHBxIIIIHB14xIHBB",
-        name,
-        type,
-        creator,
-        oldFlags,
+def escape_string(s: str) -> str:
+    """
+    Escapes special characters in a string for MacBinary compatibility.
+
+    Args:
+        s (str): The input string to escape.
+
+    Returns:
+        str: The escaped string.
+    """
+    special_chars = '/":*|\\?%<>\x7f'
+    escaped_string = []
+
+    for char in s:
+        if char == "\x81":
+            escaped_string.append("\x81\x79")
+        elif char in special_chars or ord(char) < 0x20:
+            escaped_string.append("\x81" + chr(0x80 + ord(char)))
+        else:
+            escaped_string.append(char)
+
+    return "".join(escaped_string)
+
+
+def file_to_macbin(
+    datalen: int,
+    rsrclen: int,
+    create_date: int,
+    mod_date: int,
+    file_type: bytes,
+    creator: bytes,
+    flags: int,
+    name: bytes,
+) -> bytes:
+    """
+    Converts file metadata to MacBinary format.
+
+    Args:
+        datalen (int): The length of the data fork.
+        rsrclen (int): The length of the resource fork.
+        create_date (int): The file creation date in Mac timestamp format.
+        mod_date (int): The file modification date in Mac timestamp format.
+        file_type (bytes): A 4-byte string indicating the file type.
+        creator (bytes): A 4-byte string indicating the creator.
+        flags (int): File flags.
+        name (bytes): The name of the file as a byte string.
+
+    Returns:
+        bytes: The file metadata in MacBinary format.
+
+    The function packs the provided metadata into a MacBinary header,
+    computes a CRC for error-checking, and returns the combined result.
+    """
+    old_flags = (flags >> 8) & 0xFF
+    new_flags = flags & 0xFF
+
+    macbin_header = struct.pack(
+        ">x64p4s4sBxHHHBxIIIIHB14xIHBB",
+        name,  # Filename (Pascal string)
+        file_type,  # File type
+        creator,  # Creator
+        old_flags,  # Finder flags (old)
+        0,  # Zeroed fields
         0,
         0,
+        old_flags & 0x80,  # Finder flags (old, locked bit)
+        datalen,  # Data fork length
+        rsrclen,  # Resource fork length
+        create_date,  # Creation date
+        mod_date,  # Modification date
+        0,  # GetInfo length
+        new_flags,  # Finder flags (new)
+        0,  # Zeroed fields
         0,
-        oldFlags & 128,
-        datalen,
-        rsrclen,
-        crdate,
-        mddate,
-        0,
-        newFlags,
-        0,
-        0,
-        129,
-        129
+        129,  # Version number
+        129,  # Minimum version needed to read the file
     )
-    macbin += struct.pack('>H2x', crc_hqx(macbin, 0))
+
+    crc = crc_hqx(macbin_header, 0)
+    macbin = macbin_header + struct.pack(">H2x", crc)
+
     return macbin
 
 
-def escape_string(s: str) -> str:
-    new_name = ""
-    for char in s:
-        if char == "\x81":
-            new_name += "\x81\x79"
-        elif char in '/":*|\\?%<>\x7f' or ord(char) < 0x20:
-            new_name += "\x81" + chr(0x80 + ord(char))
-        else:
-            new_name += char
-    return new_name
-
-
 def punyencode(orig: str) -> str:
+    """
+    Encodes a string using Punycode, applying additional rules for special
+    characters.
+
+    Args:
+        orig (str): The original input string to encode.
+
+    Returns:
+        str: The Punycode-encoded string with a prefix if necessary, or the
+             original string.
+    """
     s = escape_string(orig)
     encoded = s.encode("punycode").decode("ascii")
-    # punyencoding adds an '-' at the end when there are no special chars
-    # don't use it for comparing
-    compare = encoded
-    if encoded.endswith("-"):
-        compare = encoded[:-1]
+
+    # Punycode encoding adds a '-' at the end when there are no special
+    # characters. Remove trailing '-' for comparison purposes.
+    compare = encoded.rstrip("-")
+
+    # Return the Punycode string prefixed with 'xn--' if the original and
+    # comparison differ, or if the last character is a space or a dot.
     if orig != compare or compare[-1] in " .":
         return "xn--" + encoded
     return orig
 
 
-japanese = len(sys.argv) > 3 and sys.argv[3] == 'j'
-f = open(sys.argv[1], 'rb')
-assert f.read(4) in [b'\x00\x05\x16\x07', b'\x00\x05\x16\x00']
-assert f.read(4) == b'\x00\x02\x00\x00'
-f.seek(0x10, 1)
-num_ent, = struct.unpack('>H', f.read(2))
-entries = []
-for _ in range(num_ent):
-    ent_id, ent_off, ent_len = struct.unpack('>III', f.read(0xC))
-    entries.append((ent_id, ent_off, ent_len))
+def main():
+    """
+    Main function for converting AppleDouble files to MacBinary format.
 
-print(entries)
-ent_data = {}
-for ent_id, ent_off, ent_len in entries:
-    f.seek(ent_off)
-    ent_data[ent_id] = f.read(ent_len)
+    This function processes an input AppleDouble file and optionally a data
+    fork file, extracts necessary metadata, and converts the content to
+    MacBinary format. The output file is saved in the same directory as the
+    input file with a `.bin` extension.
 
-data_fork = ent_data.get(1, b'')
-if not data_fork:
-    # i, = re.findall(r'\.(\d{3})\.', sys.argv[1])
-    # print(f'no data fork, found {i}, trying '+re.sub(rf'(.+?)\.{i}', rf'\1.{int(i) - 1:03}', sys.argv[1][:-4]))
+    Command-line Arguments:
+        input_file (str):            The path to the AppleDouble input file.
+        data_fork (str, optional):   The path to the data fork file. If not
+                                     provided, the data fork is extracted from
+                                     the input file.
+        --japanese (bool, optional): Flag indicating if Japanese filename
+                                     parsing should be used.
+
+    Raises:
+        AssertionError: If the input file does not have the expected
+                        AppleDouble header.
+        FileNotFoundError: If the specified data fork file cannot be found.
+    """
+    parser = argparse.ArgumentParser(
+        description="Convert AppleDouble files to MacBinary"
+    )
+    parser.add_argument("input_file", type=str, help="Input file")
+    parser.add_argument("data_fork", type=str, nargs="?", help="Data fork")
+    parser.add_argument(
+        "--japanese", action="store_true", help="Japanese filename parsing"
+    )
+    args = parser.parse_args()
+
+    with open(args.input_file, "rb") as f:
+        assert f.read(4) in [b"\x00\x05\x16\x07", b"\x00\x05\x16\x00"]
+        assert f.read(4) == b"\x00\x02\x00\x00"
+        f.seek(0x10, 1)
+        num_ent = struct.unpack(">H", f.read(2))[0]
+
+        entries = [struct.unpack(">III", f.read(0xC)) for _ in range(num_ent)]
+
+    ent_data = {}
+    for ent_id, ent_off, ent_len in entries:
+        f.seek(ent_off)
+        ent_data[ent_id] = f.read(ent_len)
+
+    data_fork = ent_data.get(1, b"")
+    if not data_fork and args.data_fork:
+        try:
+            with open(args.data_fork, "rb") as df:
+                data_fork = df.read()
+        except FileNotFoundError:
+            pass
+
+    rsrc_fork = ent_data.get(2, b"")
+    file_name = ent_data.get(3, b"")
+
+    if not file_name:
+        file_name = os.path.basename(args.input_file).replace(".rsrc", "")
+        file_name = re.sub(r"^\._", "", file_name)
+        file_name = parse.unquote_to_bytes(file_name)
+        try:
+            encoding = "shift-jis" if args.japanese else "mac-roman"
+            file_name = file_name.decode("utf-8").encode(encoding)
+        except UnicodeDecodeError:
+            pass
+
     try:
-        data_fork = open(sys.argv[2], 'rb').read()
-    except (FileNotFoundError, IndexError):
-        pass
+        crtime, modtime = struct.unpack(">ii8x", ent_data.get(8, b""))
+        crtime += 3029529600  # AppleDouble is seconds from 2000-01-01
+        modtime += 3029529600
+    except TypeError:
+        statinfo = os.stat(args.input_file)
+        crtime = int(statinfo.st_ctime) + 2082844800
+        modtime = int(statinfo.st_mtime) + 2082844800
 
-rsrc_fork = ent_data.get(2, b'')
-file_name = ent_data.get(3, b'')
-# if not file_name:
-#     file_name_len = rsrc_fork[0x30]
-#     file_name = rsrc_fork[0x31:0x31 + file_name_len]
+    data = ent_data.get(9, b"XXXXXXXXXX")
+    file_type, fcreator, fflags = struct.unpack(">4s4sH", data[:10])
 
-if not file_name:
-    file_name = os.path.basename(sys.argv[1]).replace('.rsrc', '')
-    file_name = re.sub(r'^\._', '', file_name)
-    file_name = parse.unquote_to_bytes(file_name)
-    try:
-        if japanese:
-            file_name = file_name.decode('utf-8').encode('shift-jis')
-        else:
-            file_name = file_name.decode('utf-8').encode('mac-roman')
-    except UnicodeDecodeError:
-        pass
+    file_name_decoded = file_name.decode(
+        "shift-jis" if args.japanese else "macroman"
+    )
+    print(
+        file_name_decoded,
+        len(data_fork),
+        len(rsrc_fork),
+        crtime,
+        modtime,
+        file_type,
+        fcreator,
+        fflags,
+    )
 
-try:
-    crtime, modtime = struct.unpack('>ii8x', ent_data.get(8))
-    crtime += 3029529600  # AppleDouble is seconds from 2000-01-01, need to convert to HFS
-    modtime += 3029529600
-except TypeError:
-    # crtime, modtime = 0, 0
-    statinfo = os.stat(sys.argv[1])
-    crtime = int(statinfo.st_ctime) + 2082844800
-    modtime = int(statinfo.st_mtime) + 2082844800
+    outfile_name = os.path.join(
+        os.path.dirname(args.input_file), f"{file_name_decoded}.bin"
+    )
 
-if 9 in ent_data:
-    ftype, fcreator, fflags = struct.unpack('>4s4sH', ent_data.get(9)[:10])
-else:
-    ftype, fcreator, fflags = (b'XXXX', b'XXXX', 0)
-
-if japanese:
-    print(file_name.decode("shift-jis"), len(data_fork), len(rsrc_fork), crtime, modtime, ftype, fcreator, fflags)
-else:
-    print(file_name.decode("macroman"), len(data_fork), len(rsrc_fork), crtime, modtime, ftype, fcreator, fflags)
-
-if japanese:
-    outfile_name = os.path.join(os.path.dirname(sys.argv[1]), f'{file_name.decode("shift-jis")}.bin')
-else:
-    outfile_name = os.path.join(os.path.dirname(sys.argv[1]), f'{file_name.decode("macroman")}.bin')
-
-if not rsrc_fork:
-    with open(outfile_name, 'wb') as f:
-        f.write(file_to_macbin(len(data_fork), 0, crtime, (modtime if modtime > 0 else 0), ftype, fcreator, fflags, file_name))
-        f.write(data_fork)
-else:
-    with open(outfile_name, 'wb') as f:
-        f.write(file_to_macbin(len(data_fork), len(rsrc_fork), crtime, (modtime if modtime > 0 else 0), ftype, fcreator, fflags, file_name))
+    with open(outfile_name, "wb") as out_file:
+        out_file.write(
+            file_to_macbin(
+                len(data_fork),
+                len(rsrc_fork),
+                crtime,
+                (modtime if modtime > 0 else 0),
+                file_type,
+                fcreator,
+                fflags,
+                file_name,
+            )
+        )
         if data_fork:
-            f.write(data_fork)
-            f.write(b'\x00' * (-len(data_fork) % 128))
+            out_file.write(data_fork)
+            out_file.write(b"\x00" * (-len(data_fork) % 128))
         if rsrc_fork:
-            f.write(rsrc_fork)
-            f.write(b'\x00' * (-len(rsrc_fork) % 128))
+            out_file.write(rsrc_fork)
+            out_file.write(b"\x00" * (-len(rsrc_fork) % 128))
 
-os.utime(outfile_name, (modtime - 2082844800, modtime - 2082844800))
+    os.utime(outfile_name, (modtime - 2082844800, modtime - 2082844800))
+
+
+if __name__ == "__main__":
+    main()
