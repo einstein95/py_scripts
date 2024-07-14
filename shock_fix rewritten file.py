@@ -68,10 +68,7 @@ def parse_dict(data, endian="<"):
         try:
             names.append(fname.decode("utf-8"))
         except UnicodeDecodeError:
-            try:
-                names.append(fname.decode("cp1252"))
-            except UnicodeDecodeError:
-                names.append(fname.decode("shift-jis"))
+            names.append(fname.decode("shift-jis"))
     return names
 
 
@@ -80,27 +77,27 @@ f = open(file, "rb").read()
 win_file = re.search(rb"XFIR.{4}LPPA", f, re.S)
 mac_file = re.search(rb"RIFX.{4}APPL", f, re.S)
 if win_file:
-    off = win_file.start()
+    movie_offset = win_file.start()
 elif mac_file:
-    off = mac_file.start()
+    movie_offset = mac_file.start()
 else:
     print("not a Director application")
     exit(1)
 
-print(f"SW file found at 0x{off:x}")
-f = BytesIO(f[off:])
+print(f"SW file found at 0x{movie_offset:x}")
+f = BytesIO(f[movie_offset:])
 endian = read_ident(f)
 f.seek(imap_pos)
 assert read_tag(f, endian) == "imap"
 f.seek(0x8, 1)
-off = unpack(endian + "I", f.read(4))[0] - mmap_pos
-f.seek(mmap_pos)
+actual_mmap_pos = read_i32(f, endian) - movie_offset
+f.seek(actual_mmap_pos)
 assert read_tag(f, endian) == "mmap"
-f.seek(mmap_pos + 0xA)
+f.seek(0x6, 1)
 mmap_res_len = read_i16(f, endian)
-f.seek(mmap_pos + 0x10)
+f.seek(0x4, 1)
 mmap_res_count = read_i32(f, endian)
-mmap_ress_pos = mmap_pos + 0x20
+mmap_ress_pos = actual_mmap_pos + 0x20
 f.seek(mmap_ress_pos + 0x8)
 REL = read_i32(f, endian)
 files = []
@@ -150,12 +147,7 @@ for name, file in [
     temp_file.seek(0x8)
     file_type = read_tag(temp_file, temp_file_endian)
     extension = {".dir": [".dxr", ".dcr"], ".cst": [".cxt", ".cct"]}
-    if oname[-4] == ".":
-        oname_ext = oname[-4:].lower()
-        # oname = oname[:-4]
-    else:
-        oname_ext = ".dir"
-
+    oname_ext = oname.lower()[-4:]
     if oname_ext in extension:
         if file_type == "MV93":
             oname_ext = extension[oname_ext][0]
@@ -163,8 +155,7 @@ for name, file in [
             oname_ext = extension[oname_ext][1]
         if oname[-4:].isupper():
             oname_ext = oname_ext.upper()
-    
-    oname = oname[:-4] + oname_ext
+        oname = oname[:-4] + oname_ext
 
     oname = oname.replace("/", "_")
 
@@ -178,12 +169,14 @@ for name, file in [
             temp_file.seek(pos)
         tag = ""
         size = 0
+        print(tag)
         while tag not in ["XTdf", "FILE"]:
             if tag == "Xinf":
                 from binascii import hexlify
 
                 print(hexlify(temp_file.read(size)).decode("ascii"))
                 size = 0
+
             temp_file.read(size)
             tag = read_tag(temp_file, temp_file_endian)
             size = read_i32(temp_file, temp_file_endian)
@@ -197,11 +190,12 @@ for name, file in [
             temp_file.read(size)
         continue
 
-    temp_file.seek(0x36)
+    temp_file.seek(mmap_pos + 0x24)  # 0x36
+    print(hex(temp_file.tell()))
     mmap_res_len = read_i16(temp_file, temp_file_endian)
-    temp_file.seek(0x3C)
-    mmap_res = read_i32(temp_file, temp_file_endian) - 1  # includes RIFX
-    temp_file.seek(0x54)
+    temp_file.seek(0x6, 1)
+    mmap_res = read_i16(temp_file, temp_file_endian) - 1  # includes RIFX
+    temp_file.seek(0x14, 1)
     relative = read_i32(temp_file, temp_file_endian)
     temp_file.seek(int_mmap_pos)
     write_i32(temp_file, mmap_pos, temp_file_endian)
@@ -219,10 +213,4 @@ for name, file in [
         temp_file.seek(-4, 2)
         write_i32(temp_file, 0, temp_file_endian)
     temp_file.seek(0)
-    oname_orig = oname
-    i = 0
-    while os.path.exists(os.path.join(outfolder, oname)):
-        # print(f'{oname} already exists, renaming')
-        i += 1
-        oname = f'{oname_orig}_{i}'
     open(os.path.join(outfolder, oname), "wb").write(temp_file.read())
