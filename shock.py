@@ -7,70 +7,71 @@ import re
 import sys
 from io import BytesIO
 from struct import pack, unpack
-from typing import List
+from typing import Literal
 # from zlib import decompress
+
+ENDIAN = Literal["<"] | Literal[">"] | Literal[""]
 
 IMAP_POS = 0xC
 INT_MMAP_POS = 0x18
 MMAP_POS = 0x2C
 
+class EndianReader(BytesIO):
 
-def read_ident(file: BytesIO) -> str:
-    """Reads the identifier of the file and determines its endianness."""
-    signature = file.read(4)
-    if signature in [b"XFIR", b"FFIR"]:
-        return "<"
-    if signature in [b"RIFX", b"RIFF"]:
-        return ">"
-    return ""
+    endian: ENDIAN = ""
 
+    def read_ident(self) -> ENDIAN:
+        """Reads the identifier of the file and determines its endianness."""
+        signature = self.read(4)
+        if signature in [b"XFIR", b"FFIR"]:
+            self.endian = "<"
+        if signature in [b"RIFX", b"RIFF"]:
+            self.endian = ">"
+        return self.endian
 
-def read_tag(file: BytesIO, endian: str = "<") -> str:
-    """Reads and returns a 4-byte tag, adjusting for endianness."""
-    tag = file.read(4)
-    if endian == "<":
-        tag = tag[::-1]
-    return tag.decode("ascii")
+    def read_tag(self) -> str:
+        """Reads and returns a 4-byte tag, adjusting for endianness."""
+        tag = self.read(4)
+        if self.endian == "<":
+            tag = tag[::-1]
+        return tag.decode("ascii")
 
+    def read_i16(self) -> int:
+        """Reads a 16-bit integer from the file."""
+        data = unpack(f"{self.endian}H", self.read(2))[0]
+        return data
 
-def read_i16(file: BytesIO, endian: str = "<") -> int:
-    """Reads a 16-bit integer from the file."""
-    data = unpack(f"{endian}H", file.read(2))[0]
-    return data
+    def read_i32(self) -> int:
+        """Reads a 32-bit integer from the file."""
+        data = unpack(f"{self.endian}I", self.read(4))[0]
+        return data
 
+    def write_i32(self, data) -> None:
+        """Writes a 32-bit integer to the file."""
+        packed_data = pack(f"{self.endian}I", data)
+        self.write(packed_data)
 
-def read_i32(file: BytesIO, endian: str = "<") -> int:
-    """Reads a 32-bit integer from the file."""
-    data = unpack(f"{endian}I", file.read(4))[0]
-    return data
-
-
-def write_i32(file: BytesIO, data: int, endian: str = "<") -> None:
-    """Writes a 32-bit integer to the file."""
-    packed_data = pack(f"{endian}I", data)
-    file.write(packed_data)
-
-
-def parse_dict(dict_data: bytes, endianness: str = "<") -> List[str]:
+def parse_dict(dict_data: bytes, endianness: ENDIAN = "<") -> list[str]:
     """Parses the dictionary section of the file and extracts file names."""
-    byte_stream = BytesIO(dict_data[8:])
-    toc_length = unpack(f"{endianness}I", byte_stream.read(4))[0]
+    byte_stream = EndianReader(dict_data[8:])
+    byte_stream.endian = endianness
+    toc_length = byte_stream.read_i32()
 
     if toc_length > 0x10000:
-        endianness = ">" if endianness == "<" else "<"
+        byte_stream.endian = ">" if endianness == "<" else "<"
         byte_stream.seek(0)
-        toc_length = unpack(f"{endianness}I", byte_stream.read(4))[0]
+        toc_length = byte_stream.read_i32()
 
     byte_stream.seek(0x10)
-    len_names = unpack(f"{endianness}I", byte_stream.read(4))[0]
+    len_names = byte_stream.read_i32()
     byte_stream.seek(0x18)
     byte_stream.read(toc_length)
-    unk1 = read_i16(byte_stream, endianness)
+    unk1 = byte_stream.read_i16()
     byte_stream.read(unk1 - 0x12)
 
     filenames = []
     for _ in range(len_names):
-        name_length = unpack(f"{endianness}I", byte_stream.read(4))[0]
+        name_length = byte_stream.read_i32()
         name = byte_stream.read(name_length)
         assert name_length == len(name)
         byte_stream.read(-name_length % 4)
@@ -109,33 +110,33 @@ def main() -> None:
         sys.exit(1)
 
     print(f"SW file found at 0x{offset:x}")
-    file_stream = BytesIO(data[offset:])
-    endian = read_ident(file_stream)
+    file_stream = EndianReader(data[offset:])
+    endian = file_stream.read_ident()
 
     file_stream.seek(IMAP_POS)
-    assert read_tag(file_stream, endian) == "imap"
+    assert file_stream.read_tag() == "imap"
     file_stream.seek(8, 1)
     # This was in here and did nothing ???
     # offset = unpack(f"{endian}I", file_stream.read(4))[0] - MMAP_POS
 
     file_stream.seek(MMAP_POS)
-    assert read_tag(file_stream, endian) == "mmap"
+    assert file_stream.read_tag() == "mmap"
     file_stream.seek(MMAP_POS + 0xA)
-    mmap_res_len = read_i16(file_stream, endian)
+    mmap_res_len = file_stream.read_i16()
     file_stream.seek(MMAP_POS + 0x10)
-    mmap_res_count = read_i32(file_stream, endian)
+    mmap_res_count = file_stream.read_i32()
     mmap_ress_pos = MMAP_POS + 0x20
     file_stream.seek(mmap_ress_pos + 8)
-    rel = read_i32(file_stream, endian)
+    rel = file_stream.read_i32()
 
     files = []
     names = []
 
     for i in range(mmap_res_count):
         file_stream.seek((i * mmap_res_len) + mmap_ress_pos)
-        tag = read_tag(file_stream, endian)
-        size = read_i32(file_stream, endian)
-        chunk_offset = read_i32(file_stream, endian)
+        tag = file_stream.read_tag()
+        size = file_stream.read_i32()
+        chunk_offset = file_stream.read_i32()
         size += 8
         if chunk_offset:
             chunk_offset -= rel
@@ -163,12 +164,12 @@ def main() -> None:
         print(f"Original file path: {os.path.join(name)} @ 0x{offset:x}")
 
         file_stream.seek(offset + 4)
-        size = read_i32(file_stream, endian) + 8
+        size = file_stream.read_i32() + 8
         file_stream.seek(offset)
-        temp_file = BytesIO(file_stream.read(size))
-        temp_file_endian = read_ident(temp_file)
+        temp_file = EndianReader(file_stream.read(size))
+        temp_file.read_ident()
         temp_file.seek(8)
-        file_type = read_tag(temp_file, temp_file_endian)
+        file_type = temp_file.read_tag()
 
         extension_mapping = {
             ".dir": [".dxr", ".dcr"],
@@ -222,27 +223,27 @@ def main() -> None:
         #     continue
 
         temp_file.seek(0x36)
-        mmap_res_len = read_i16(temp_file, temp_file_endian)
+        mmap_res_len = temp_file.read_i16()
         temp_file.seek(0x3C)
-        mmap_res = read_i32(temp_file, temp_file_endian) - 1
+        mmap_res = temp_file.read_i32() - 1
         temp_file.seek(0x54)
-        relative = read_i32(temp_file, temp_file_endian)
+        relative = temp_file.read_i32()
         temp_file.seek(INT_MMAP_POS)
-        write_i32(temp_file, MMAP_POS, temp_file_endian)
+        temp_file.write_i32(MMAP_POS)
 
         for i in range(mmap_res):
             pos = 0x68 + (i * mmap_res_len)
             temp_file.seek(pos)
-            absolute = read_i32(temp_file, endian)
+            absolute = temp_file.read_i32()
             if absolute:
                 absolute -= relative
                 temp_file.seek(pos)
-                write_i32(temp_file, absolute, temp_file_endian)
+                temp_file.write_i32(absolute)
 
         temp_file.seek(-4, 2)
         if temp_file.read(4) != b"\x00\x00\x00\x00":
             temp_file.seek(-4, 2)
-            write_i32(temp_file, 0, temp_file_endian)
+            temp_file.write_i32(0)
 
         temp_file.seek(0)
         output_name_orig = output_name
