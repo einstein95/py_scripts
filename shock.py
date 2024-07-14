@@ -142,7 +142,7 @@ def main() -> None:
             chunk_offset -= rel
 
         if tag == "File":
-            files.append((offset, size))
+            files.append((chunk_offset, size))
         elif tag == "Dict":
             file_stream.seek(chunk_offset)
             names = parse_dict(file_stream.read(size), endian)
