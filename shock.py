@@ -8,7 +8,7 @@ import sys
 from io import BytesIO
 from struct import pack, unpack
 from typing import Literal
-# from zlib import decompress
+from zlib import decompress
 
 ENDIAN = Literal["<"] | Literal[">"] | Literal[""]
 
@@ -16,7 +16,14 @@ IMAP_POS = 0xC
 INT_MMAP_POS = 0x18
 MMAP_POS = 0x2C
 
+
 class EndianReader(BytesIO):
+    """
+    Endian-aware functions for reading data
+
+    Args:
+        BytesIO (file): Input file
+    """
 
     endian: ENDIAN = ""
 
@@ -50,6 +57,7 @@ class EndianReader(BytesIO):
         """Writes a 32-bit integer to the file."""
         packed_data = pack(f"{self.endian}I", data)
         self.write(packed_data)
+
 
 def parse_dict(dict_data: bytes, endianness: ENDIAN = "<") -> list[str]:
     """Parses the dictionary section of the file and extracts file names."""
@@ -197,30 +205,30 @@ def main() -> None:
                 f.write(temp_file.read())
             continue
 
-        # if file_type == "Xtra":
-        #     pos = temp_file.tell()
-        #     if temp_file.read(1) != b"\x00":
-        #         temp_file.seek(pos)
-        #     tag = ""
-        #     size = 0
-        #     while tag not in ["XTdf", "FILE"]:
-        #         if tag == "Xinf":
-        #             # TODO: Figure out what this is
-        #             print(temp_file.read(size).hex())
-        #             size = 0
-        #         temp_file.read(size)
-        #         tag = read_tag(temp_file, temp_file_endian)
-        #         size = read_i32(temp_file, temp_file_endian)
-        #         size += -size % 2
-        #         if tag == "FILE":
-        #             temp_file.read(0x1C)
-        #     if size:
-        #         decompressed_data = decompress(temp_file.read(size))
-        #         with open(os.path.join(out_folder, output_name), "wb") as f:
-        #             f.write(decompressed_data)
-        #     else:
-        #         temp_file.read(size)
-        #     continue
+        if file_type == "Xtra":
+            pos = temp_file.tell()
+            if temp_file.read(1) != b"\x00":
+                temp_file.seek(pos)
+            tag = ""
+            size = 0
+            while tag not in ["XTdf", "FILE"]:
+                if tag == "Xinf":
+                    # TODO: Figure out what this is
+                    print(temp_file.read(size).hex())
+                    size = 0
+                temp_file.read(size)
+                tag = temp_file.read_tag()
+                size = temp_file.read_i32()
+                size += -size % 2
+                if tag == "FILE":
+                    temp_file.read(0x1C)
+            if size:
+                decompressed_data = decompress(temp_file.read(size))
+                with open(os.path.join(out_folder, output_name), "wb") as f:
+                    f.write(decompressed_data)
+            else:
+                temp_file.read(size)
+            continue
 
         temp_file.seek(0x36)
         mmap_res_len = temp_file.read_i16()
