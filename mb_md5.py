@@ -1,9 +1,9 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import argparse
 import hashlib
 import re
 from pathlib import Path
-from struct import unpack
+import struct
 
 import macresources
 
@@ -74,7 +74,7 @@ args = parser.parse_args()
 pjver = "0"
 with args.file_path.open(mode="rb") as f:
     f.seek(0x53)
-    datalen, rsrclen = unpack(">II", f.read(8))
+    datalen, rsrclen = struct.unpack(">II", f.read(8))
     if not rsrclen:
         f.seek(0x80)
         readsize = datalen
@@ -89,26 +89,32 @@ with args.file_path.open(mode="rb") as f:
                 print(f'{r.type.decode("mac-roman")}_{r.id:<5} {r.name}')
 
         if args.version:
-            # vers = [i for i in m if i.type == b"vers" and i.id == 1]
-            # old_vers = [i for i in m if i.type == b"MMTE" and i.id == 0]
-            # if not vers and not old_vers:
-            # raise ValueError("!!! no version !!!")
-            # if not old_vers:
-            # digits = [
-            # (byte >> 4) * 10 + (byte & 0x0F) for byte in bytes(vers[0])[:2]
-            # ]
-            # pjver = digits[0] * 100 + digits[1]
-            # else:
-            # digits = bytes(old_vers[0][1:]).decode("macroman").split()[0]
-            # pjver = re.search(r"^[\d\.]+", digits).group(0)
-            # pjver = int(float(pjver) * 100)
-            f.seek(rsrcoff - 0x1C)
-            projoff = unpack(">I", f.read(4))[0]
-            f.seek(0x80 + projoff + 4)
-            rifxoff = unpack(">I", f.read(4))[0]
+            try:
+                f.seek(rsrcoff - 0x1C)
+                projoff = struct.unpack(">I", f.read(4))[0]
+                f.seek(0x80 + projoff + 4)
+                rifxoff = struct.unpack(">I", f.read(4))[0]
+            except struct.error:
+                vers = [i for i in m if i.type == b"vers" and i.id == 1]
+                old_vers = [i for i in m if i.type == b"MMTE" and i.id == 0]
+                if not vers and not old_vers:
+                    raise ValueError("!!! no version !!!")
+                if not old_vers:
+                    digits = [
+                        (byte >> 4) * 10 + (byte & 0x0F) for byte in bytes(vers[0])[:2]
+                    ]
+                    ver = digits[0] * 100 + digits[1]
+                else:
+                    digits = bytes(old_vers[0][1:]).decode("macroman").split()[0]
+                    match = re.search(r"^[\d\.]+", digits)
+                    if match:
+                        ver = match.group(0)
+                    else:
+                        raise ValueError("???")
+                    pjver = int(float(ver) * 100)
 
         f.seek(tmpoff)
-        rsrcoff, rsrclen = unpack(">I4xI", f.read(0xC))
+        rsrcoff, rsrclen = struct.unpack(">I4xI", f.read(0xC))
         f.seek(rsrcoff - 0xC, 1)
         readsize = datalen if args.data_fork else rsrclen
     maxsize = 2 * 1024 * 1024 if args.wage else 5000

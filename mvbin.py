@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 from os import utime
 from os.path import join, split
 from shutil import move

@@ -174,10 +174,10 @@ def main():
 
         entries = [struct.unpack(">III", f.read(0xC)) for _ in range(num_ent)]
 
-    ent_data = {}
-    for ent_id, ent_off, ent_len in entries:
-        f.seek(ent_off)
-        ent_data[ent_id] = f.read(ent_len)
+        ent_data = {}
+        for ent_id, ent_off, ent_len in entries:
+            f.seek(ent_off)
+            ent_data[ent_id] = f.read(ent_len)
 
     data_fork = ent_data.get(1, b"")
     if not data_fork and args.data_fork:
@@ -204,7 +204,7 @@ def main():
         crtime, modtime = struct.unpack(">ii8x", ent_data.get(8, b""))
         crtime += 3029529600  # AppleDouble is seconds from 2000-01-01
         modtime += 3029529600
-    except TypeError:
+    except (TypeError, struct.error):
         statinfo = os.stat(args.input_file)
         crtime = int(statinfo.st_ctime) + 2082844800
         modtime = int(statinfo.st_mtime) + 2082844800
