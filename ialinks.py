@@ -27,4 +27,4 @@ d = [l.split() for l in r.text.splitlines()]
 d.sort(key=lambda x: x[1])
 for status, timestamp, savedurl in d:
     if status in ['200', '-']:
-        print(f'http://web.archive.org/web/{timestamp}id_/{savedurl}')
+        print(f'https://web.archive.org/web/{timestamp}id_/{savedurl}')

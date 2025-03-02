@@ -71,7 +71,7 @@ parser.add_argument("--version", action="store_true")
 parser.add_argument("--wage", action="store_true")
 args = parser.parse_args()
 
-pjver = "0"
+pjver = 0
 with args.file_path.open(mode="rb") as f:
     f.seek(0x53)
     datalen, rsrclen = struct.unpack(">II", f.read(8))
@@ -84,34 +84,34 @@ with args.file_path.open(mode="rb") as f:
         f.seek(rsrcoff + -datalen % 0x80)  # macbinary header + data fork + padding
         tmpoff = f.tell()
         m = list(macresources.parse_file(f.read()))
-        for r in m:
-            if r.type in [b"XCOD", b"XCMD", b"XFCN"]:
-                print(f'{r.type.decode("mac-roman")}_{r.id:<5} {r.name}')
+        # for r in m:
+        #     if r.type in [b"XCOD", b"XCMD", b"XFCN"]:
+        #         print(f'{r.type.decode("mac-roman")}_{r.id:<5} {r.name}')
 
         if args.version:
-            try:
-                f.seek(rsrcoff - 0x1C)
-                projoff = struct.unpack(">I", f.read(4))[0]
-                f.seek(0x80 + projoff + 4)
-                rifxoff = struct.unpack(">I", f.read(4))[0]
-            except struct.error:
-                vers = [i for i in m if i.type == b"vers" and i.id == 1]
-                old_vers = [i for i in m if i.type == b"MMTE" and i.id == 0]
-                if not vers and not old_vers:
-                    raise ValueError("!!! no version !!!")
-                if not old_vers:
-                    digits = [
-                        (byte >> 4) * 10 + (byte & 0x0F) for byte in bytes(vers[0])[:2]
-                    ]
-                    ver = digits[0] * 100 + digits[1]
+            # try:
+            #     f.seek(rsrcoff - 0x1C)
+            #     projoff = struct.unpack(">I", f.read(4))[0]
+            #     f.seek(0x80 + projoff + 4)
+            #     rifxoff = struct.unpack(">I", f.read(4))[0]
+            # except struct.error:
+            vers = [i for i in m if i.type == b"vers" and i.id == 1]
+            old_vers = [i for i in m if i.type == b"MMTE" and i.id == 0]
+            if not vers and not old_vers:
+                raise ValueError("!!! no version !!!")
+            if not old_vers:
+                digits = [
+                    (byte >> 4) * 10 + (byte & 0x0F) for byte in bytes(vers[0])[:2]
+                ]
+                pjver = digits[0] * 100 + digits[1]
+            else:
+                ver = bytes(old_vers[0][1:]).decode("macroman").split()[0]
+                match = re.search(r"^[\d\.]+", ver)
+                if match:
+                    ver = match.group(0)
                 else:
-                    digits = bytes(old_vers[0][1:]).decode("macroman").split()[0]
-                    match = re.search(r"^[\d\.]+", digits)
-                    if match:
-                        ver = match.group(0)
-                    else:
-                        raise ValueError("???")
-                    pjver = int(float(ver) * 100)
+                    raise ValueError("???")
+                pjver = int(float(ver) * 100)
 
         f.seek(tmpoff)
         rsrcoff, rsrclen = struct.unpack(">I4xI", f.read(0xC))

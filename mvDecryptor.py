@@ -10,9 +10,9 @@ import tqdm
 
 decryptedExt = {".rpgmvo": ".ogg", ".rpgmvm": ".m4a", ".rpgmvp": ".png"}
 encryptedExt = {v: k for k, v in decryptedExt.items()}
-good_ogg = b"OggS\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x0c'"
-good_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
-good_webp = b'RIFF\xa2U\x00\x00WEBPVP8X'
+# good_ogg = b"OggS\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x0c'"
+good_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+# good_webp = b'RIFF\xa2U\x00\x00WEBPVP8X'
 
 
 # XOR encryption / decryption
@@ -24,7 +24,7 @@ def xor(data: bytes, key: bytes) -> bytes:
 def decryptFilename(encryptedFilename: str) -> str:
     filename, extension = os.path.splitext(encryptedFilename)
     if not extension:
-        filename = ''
+        filename = ""
         extension = os.path.basename(encryptedFilename)
     if extension[-1] == "_":
         return encryptedFilename[:-1]
@@ -62,12 +62,14 @@ def decryptFile(encryptedFilename: str, key: bytes) -> None:
         with open(decryptFilename(encryptedFilename), "wb") as outfile:
             outfile.write(plaintext + f.read())
 
+
 def bruteforceKey(data: bytes, key: str) -> None:
-    if key in ['rpgvmp', 'png_']:
-        print('PNG:', xor(data, good_png).hex())
-        print('WEBP:', xor(data, good_webp).hex())
-    elif key in ['rpgvmo', 'ogg_']:
-        print('OGG:', xor(data, good_ogg).hex())
+    if key in ["rpgvmp", "png_"]:
+        print("PNG:", xor(data, good_png).hex())
+        # print("WEBP:", xor(data, good_webp).hex())
+    # elif key in ["rpgvmo", "ogg_"]:
+        # print("OGG:", xor(data, good_ogg).hex())
+
 
 def encryptFile(decryptedFilename: str, key: bytes, gameVersion: str) -> None:
     header = struct.pack(">5s4xH5x", b"RPG" + gameVersion.upper().encode(), 0x301)
@@ -78,7 +80,9 @@ def encryptFile(decryptedFilename: str, key: bytes, gameVersion: str) -> None:
             outfile.write(header + cyphertext + f.read())
 
 
-def processEntireGame(gameDir: str, isEncrypt: str) -> None:
+def processEntireGame(gameDir: str, isEncrypt: bool) -> None:
+    key = b""
+    SystemJson = {}
     if not args.brute:
         with open(gameDir + "/data/System.json", "rb") as f:
             SystemJson = json.load(f)
@@ -93,6 +97,8 @@ def processEntireGame(gameDir: str, isEncrypt: str) -> None:
         print("Unable to determine RPG Maker type")
         exit(1)
 
+    print(key.hex())
+
     for path, _, files in os.walk(gameDir):
         if args.brute:
             files = [f for f in files if isEncryptedFile(f)]
@@ -101,9 +107,9 @@ def processEntireGame(gameDir: str, isEncrypt: str) -> None:
                 with open(filePath, "rb") as f:
                     f.seek(16)
                     encBytes = f.read(16)
-                    bruteforceKey(encBytes, fn.split('.')[-1])
+                    bruteforceKey(encBytes, fn.split(".")[-1])
+                    return
             continue
-
 
         if isEncrypt:
             files = [f for f in files if isDecryptedFile(f)]
@@ -113,8 +119,8 @@ def processEntireGame(gameDir: str, isEncrypt: str) -> None:
         if not files:
             continue
 
-        for f in tqdm.tqdm(files):
-            filePath = os.path.join(path, f)
+        for file in tqdm.tqdm(files):
+            filePath = os.path.join(path, file)
             if isEncrypt:
                 if not filePath.endswith(
                     ("icon/icon.png", "img/system/Loading.png", "img/system/Window.png")
@@ -126,8 +132,8 @@ def processEntireGame(gameDir: str, isEncrypt: str) -> None:
 
     SystemJson["hasEncryptedImages"] = SystemJson["hasEncryptedAudio"] = isEncrypt
 
-    with open(gameDir + "/data/System.json", "w") as f:
-        json.dump(SystemJson, f, separators=(",", ":"), ensure_ascii=False)
+    with open(gameDir + "/data/System.json", "w") as newf:
+        json.dump(SystemJson, newf, separators=(",", ":"), ensure_ascii=False)
 
 
 if __name__ == "__main__":
@@ -140,7 +146,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-e", "--encrypt", action="store_true", help="Encrypt the entire game"
     )
-    parser.add_argument("-b", "--brute", action="store_true", help="Find the key from PNG")
+    parser.add_argument(
+        "-b", "--brute", action="store_true", help="Find the key from PNG"
+    )
     args = parser.parse_args()
 
     processEntireGame(args.game_path, args.encrypt)
