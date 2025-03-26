@@ -1,17 +1,17 @@
 import random
 
 
-def new_serial_number():
+def generate_serial_number():
     return random.randint(1000000, 10000000)
 
 
-def calculate_registration_number(serial_number) -> int:
+def compute_registration_code(serial_number) -> int:
     return (serial_number % 199999) + 44
 
 
-serial = new_serial_number()
-regcode = calculate_registration_number(serial)
+serial_number = generate_serial_number()
+registration_code = compute_registration_code(serial_number)
 
-print(f"Serial Number: {serial}\nRegistration Code: {regcode}")
-with open("data.nsd", "w", encoding="utf-8") as f:
-    f.write(f"[#mySerialNumber: {serial}, #myRegistrationNumber: \"{regcode}\"]\r")
+print(f"Serial Number: {serial_number}\nRegistration Code: {registration_code}")
+with open("data.nsd", "w", encoding="utf-8") as file:
+    file.write(f"[#mySerialNumber: {serial_number}, #myRegistrationNumber: \"{registration_code}\"]\r")
