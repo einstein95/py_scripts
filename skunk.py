@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from sys import argv
+
+
 def EncryptString(msg: str, key: str) -> str:
     """
     Encrypt a message using a repeating key with specific character transformation rules.
@@ -30,18 +32,17 @@ def EncryptString(msg: str, key: str) -> str:
     encrypted = [
         # Apply XOR and character transformation in a single pass
         _transform_char(
-            ord(msg[i % msg_len]),
-            ord(key[i % key_len]),
-            i + 1,
-            msg_len,
-            key_len
+            ord(msg[i % msg_len]), ord(key[i % key_len]), i + 1, msg_len, key_len
         )
         for i in range(16)
     ]
 
-    return ''.join(encrypted)
+    return "".join(encrypted)
 
-def _transform_char(msg_char: int, key_char: int, iteration: int, msg_len: int, key_len: int) -> str:
+
+def _transform_char(
+    msg_char: int, key_char: int, iteration: int, msg_len: int, key_len: int
+) -> str:
     """
     Apply encryption transformation to a single character.
 

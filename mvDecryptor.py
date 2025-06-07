@@ -3,140 +3,155 @@
 #
 # Originally created by SilicaAndPina 1/12/2018
 
-import os
 import json
-import struct
+import os
+
 import tqdm
 
-decryptedExt = {".rpgmvo": ".ogg", ".rpgmvm": ".m4a", ".rpgmvp": ".png"}
-encryptedExt = {v: k for k, v in decryptedExt.items()}
-# good_ogg = b"OggS\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x0c'"
-good_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-# good_webp = b'RIFF\xa2U\x00\x00WEBPVP8X'
+DECRYPTED_EXTENSIONS = {".rpgmvo": ".ogg", ".rpgmvm": ".m4a", ".rpgmvp": ".png"}
+ENCRYPTED_EXTENSIONS = {v: k for k, v in DECRYPTED_EXTENSIONS.items()}
+# GOOD_OGG = b"OggS\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x0c'"
+GOOD_PNG = b"\x89PNG\r\n\x1a\x0a\x00\x00\x00\x0dIHDR"
+# GOOD_WEBP = b'RIFF\xa2U\x00\x00WEBPVP8X'
 
 
 # XOR encryption / decryption
 def xor(data: bytes, key: bytes) -> bytes:
-    key_len = len(key)
-    return bytes((data[i] ^ key[i % key_len]) for i in range(len(data)))
+    return bytes(byte ^ key[i % len(key)] for i, byte in enumerate(data))
 
 
-def decryptFilename(encryptedFilename: str) -> str:
-    filename, extension = os.path.splitext(encryptedFilename)
-    if not extension:
-        filename = ""
-        extension = os.path.basename(encryptedFilename)
-    if extension[-1] == "_":
-        return encryptedFilename[:-1]
-    return filename + decryptedExt[extension]
+def decrypt_filename(encrypted_filename: str) -> str:
+    filename, extension = os.path.splitext(encrypted_filename)
+    extension = extension or os.path.basename(encrypted_filename)
+    return (
+        encrypted_filename[:-1]
+        if extension.endswith("_")
+        else filename + DECRYPTED_EXTENSIONS.get(extension, "")
+    )
 
 
-def encryptFilename(decryptedFilename: str, gameVersion: str) -> str:
-    if gameVersion == "mz":
-        return decryptedFilename + "_"
-    else:
-        filename, extension = os.path.splitext(decryptedFilename)
-        return filename + encryptedExt[extension]
+def encrypt_filename(decrypted_filename: str, game_version: str) -> str:
+    filename, extension = os.path.splitext(decrypted_filename)
+    return (
+        decrypted_filename + "_"
+        if game_version == "mz"
+        else filename + ENCRYPTED_EXTENSIONS.get(extension, "")
+    )
 
 
-def isEncryptedFile(path: str) -> bool:
-    file_extension = path[-7:]
-    return file_extension in decryptedExt or file_extension[-1] == "_"
+def is_encrypted_file(path: str) -> bool:
+    return any(path.endswith(ext) for ext in DECRYPTED_EXTENSIONS) or path.endswith("_")
 
 
-def isDecryptedFile(path: str) -> bool:
-    file_extension = path[-4:]
-    return file_extension in encryptedExt
+def is_decrypted_file(path: str) -> bool:
+    return any(path.endswith(ext) for ext in ENCRYPTED_EXTENSIONS)
 
 
-def decryptFile(encryptedFilename: str, key: bytes) -> None:
-    with open(encryptedFilename, "rb") as f:
-        f.seek(16)
-        cyphertext = f.read(16)
-        if cyphertext == b"00000NEMLEI00000":
-            # Decrypt "The Coffin of Andy and Leyley" demo
-            remaining_data = ord(f.read(1))
-            f.read(remaining_data)
-            cyphertext = f.read(16)
-        plaintext = xor(cyphertext, key)
-        with open(decryptFilename(encryptedFilename), "wb") as outfile:
-            outfile.write(plaintext + f.read())
+def decrypt_file(encrypted_filename: str, key: bytes, game_version: str) -> None:
+    with open(encrypted_filename, "rb") as decryptfile:
+        decryptfile.seek(16)
+        ciphertext = decryptfile.read(16)
+
+        # Special case for "The Coffin of Andy and Leyley" demo
+        if ciphertext == b"00000NEMLEI00000":
+            decryptfile.seek(
+                17 + ord(decryptfile.read(1))
+            )  # Skip the remaining data and adjust position
+            ciphertext = decryptfile.read(16)
+
+        plaintext = xor(ciphertext, key)
+        with open(decrypt_filename(encrypted_filename), "wb") as outfile:
+            outfile.write(plaintext + decryptfile.read())
 
 
-def bruteforceKey(data: bytes, key: str) -> None:
-    if key in ["rpgvmp", "png_"]:
-        print("PNG:", xor(data, good_png).hex())
-        # print("WEBP:", xor(data, good_webp).hex())
-    # elif key in ["rpgvmo", "ogg_"]:
-        # print("OGG:", xor(data, good_ogg).hex())
+def bruteforce_key(data: bytes, extension: str) -> None:
+    if extension in ENCRYPTED_EXTENSIONS.values():
+        known_headers = {"rpgmvp": GOOD_PNG}  # Add more headers if needed
+        if extension in known_headers:
+            print(f"{extension.upper()}:", xor(data, known_headers[extension]).hex())
 
 
-def encryptFile(decryptedFilename: str, key: bytes, gameVersion: str) -> None:
-    header = struct.pack(">5s4xH5x", b"RPG" + gameVersion.upper().encode(), 0x301)
-    with open(decryptedFilename, "rb") as f:
-        plaintext = f.read(16)
-        cyphertext = xor(plaintext, key)
-        with open(encryptFilename(decryptedFilename, gameVersion), "wb") as outfile:
-            outfile.write(header + cyphertext + f.read())
+def encrypt_file(decrypted_filename: str, key: bytes, game_version: str) -> None:
+    header = (
+        b"RPG"
+        + game_version.upper().encode()
+        + b"\x00\x00\x00\x00\x03\x01\x00\x00\x00\x00\x00"
+    )
+    with open(decrypted_filename, "rb") as infile, open(
+        encrypt_filename(decrypted_filename, game_version), "wb"
+    ) as outfile:
+        plaintext = infile.read(16)
+        outfile.write(header + xor(plaintext, key) + infile.read())
 
 
-def processEntireGame(gameDir: str, isEncrypt: bool) -> None:
-    key = b""
-    SystemJson = {}
-    if not args.brute:
-        with open(gameDir + "/data/System.json", "rb") as f:
-            SystemJson = json.load(f)
+def process_entire_game(
+    game_directory: str, encrypt: bool, use_bruteforce: bool
+) -> None:
+    encryption_key = b""
+    system_json = {}
 
-        key = bytes.fromhex(SystemJson.get("encryptionKey", ""))
+    if not use_bruteforce:
+        try:
+            with open(
+                os.path.join(game_directory, "data", "System.json"), "rb"
+            ) as systemjson:
+                system_json = json.load(systemjson)
+                encryption_key = bytes.fromhex(system_json.get("encryptionKey", ""))
+        except FileNotFoundError:
+            print("System.json not found. Ensure the game directory is correct.")
+            exit(1)
 
-    if os.path.exists(gameDir + "/js/rpg_core.js"):
-        gameVersion = "mv"
-    elif os.path.exists(gameDir + "/js/rmmz_core.js"):
-        gameVersion = "mz"
-    else:
+    game_version = (
+        "mv"
+        if os.path.exists(os.path.join(game_directory, "js", "rpg_core.js"))
+        else (
+            "mz"
+            if os.path.exists(os.path.join(game_directory, "js", "rmmz_core.js"))
+            else None
+        )
+    )
+
+    if not game_version:
         print("Unable to determine RPG Maker type")
         exit(1)
 
-    print(key.hex())
+    if not use_bruteforce:
+        print(f"Encryption Key: {encryption_key.hex()}")
 
-    for path, _, files in os.walk(gameDir):
-        if args.brute:
-            files = [f for f in files if isEncryptedFile(f)]
-            for fn in files:
-                filePath = os.path.join(path, fn)
-                with open(filePath, "rb") as f:
-                    f.seek(16)
-                    encBytes = f.read(16)
-                    bruteforceKey(encBytes, fn.split(".")[-1])
-                    return
+    for path, _, files in os.walk(game_directory):
+        if use_bruteforce:
+            for filename in filter(is_encrypted_file, files):
+                file_path = os.path.join(path, filename)
+                with open(file_path, "rb") as brutefile:
+                    brutefile.seek(16)
+                    encrypted_bytes = brutefile.read(16)
+                    bruteforce_key(encrypted_bytes, os.path.splitext(filename)[1][1:])
+                return
             continue
 
-        if isEncrypt:
-            files = [f for f in files if isDecryptedFile(f)]
-        else:
-            files = [f for f in files if isEncryptedFile(f)]
+        target_files = filter(
+            is_decrypted_file if encrypt else is_encrypted_file, files
+        )
 
-        if not files:
-            continue
+        for file in tqdm.tqdm(target_files, desc="Processing files"):
+            file_path = os.path.join(path, file)
+            if encrypt and file_path.endswith(
+                ("icon/icon.png", "img/system/Loading.png", "img/system/Window.png")
+            ):
+                continue
 
-        for file in tqdm.tqdm(files):
-            filePath = os.path.join(path, file)
-            if isEncrypt:
-                if not filePath.endswith(
-                    ("icon/icon.png", "img/system/Loading.png", "img/system/Window.png")
-                ):
-                    encryptFile(filePath, key, gameVersion)
-            else:
-                decryptFile(filePath, key)
-            os.remove(filePath)
+            (encrypt_file if encrypt else decrypt_file)(
+                file_path, encryption_key, game_version
+            )
+            os.remove(file_path)
 
-    SystemJson["hasEncryptedImages"] = SystemJson["hasEncryptedAudio"] = isEncrypt
-
-    with open(gameDir + "/data/System.json", "w") as newf:
-        json.dump(SystemJson, newf, separators=(",", ":"), ensure_ascii=False)
+    if not use_bruteforce:
+        system_json["hasEncryptedImages"] = system_json["hasEncryptedAudio"] = encrypt
+        with open(os.path.join(game_directory, "data", "System.json"), "w") as new_file:
+            json.dump(system_json, new_file, separators=(",", ":"), ensure_ascii=False)
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -151,4 +166,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    processEntireGame(args.game_path, args.encrypt)
+    process_entire_game(args.game_path, args.encrypt, args.brute)
+
+
+if __name__ == "__main__":
+    main()

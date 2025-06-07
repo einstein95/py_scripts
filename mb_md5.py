@@ -2,8 +2,8 @@
 import argparse
 import hashlib
 import re
-from pathlib import Path
 import struct
+from pathlib import Path
 
 import macresources
 
@@ -84,9 +84,9 @@ with args.file_path.open(mode="rb") as f:
         f.seek(rsrcoff + -datalen % 0x80)  # macbinary header + data fork + padding
         tmpoff = f.tell()
         m = list(macresources.parse_file(f.read()))
-        # for r in m:
-        #     if r.type in [b"XCOD", b"XCMD", b"XFCN"]:
-        #         print(f'{r.type.decode("mac-roman")}_{r.id:<5} {r.name}')
+        for r in m:
+            if r.type in [b"XCOD", b"XCMD", b"XFCN"]:
+                print(f'{r.type.decode("mac-roman")}_{r.id:<5} {r.name}')
 
         if args.version:
             # try:

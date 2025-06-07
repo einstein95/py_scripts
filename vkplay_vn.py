@@ -1,18 +1,30 @@
 import json
 import requests
 
-games = []
-params = {
-    'page': 1,
-    'tag': 'visual_novel',
-    'order': '-priority',
-    'referer': 'https://vkplay.ru/play/tags/visual_novel/',
-}
+def fetch_games():
+    games = []
+    params = {
+        "page": 1,
+        "tag": "visual_novel",
+        "order": "-priority",
+        "referer": "https://vkplay.ru/play/tags/visual_novel/",
+    }
 
-r = requests.get('https://api.vkplay.ru/play/games/', params=params).json()
-while r['next']:
-    games += r['results']
-    r = requests.get(r['next']).json()
+    with requests.Session() as session:
+        response = session.get("https://api.vkplay.ru/play/games/", params=params)
+        response.raise_for_status()
+        data = response.json()
 
-games += r['results']
-print(json.dumps(games))
+        while data.get("next"):
+            games.extend(data["results"])
+            response = session.get(data["next"])
+            response.raise_for_status()
+            data = response.json()
+
+        games.extend(data["results"])
+
+    return games
+
+if __name__ == "__main__":
+    games = fetch_games()
+    print(json.dumps(games, indent=2))

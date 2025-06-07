@@ -11,28 +11,29 @@ from typing import Tuple
 def file_to_macbin(datalen, rsrclen, crdate, mddate, type, creator, flags, name):
     oldFlags = flags >> 8
     newFlags = flags & 255
-    macbin = struct.pack('>xB63s4s4sBxHHHBxIIIIHB14xIHBB',
-                         len(name),
-                         name,
-                         type,
-                         creator,
-                         oldFlags,
-                         0,
-                         0,
-                         0,
-                         oldFlags & 128,
-                         datalen,
-                         rsrclen,
-                         crdate,
-                         mddate,
-                         0,
-                         newFlags,
-                         0,
-                         0,
-                         129,
-                         129
-                         )
-    macbin += struct.pack('>H2x', crc_hqx(macbin, 0))
+    macbin = struct.pack(
+        ">xB63s4s4sBxHHHBxIIIIHB14xIHBB",
+        len(name),
+        name,
+        type,
+        creator,
+        oldFlags,
+        0,
+        0,
+        0,
+        oldFlags & 128,
+        datalen,
+        rsrclen,
+        crdate,
+        mddate,
+        0,
+        newFlags,
+        0,
+        0,
+        129,
+        129,
+    )
+    macbin += struct.pack(">H2x", crc_hqx(macbin, 0))
     return macbin
 
 
@@ -66,6 +67,7 @@ def escape_string(s: str) -> str:
             new_name += char
     return new_name
 
+
 def needs_punyencoding(orig: str) -> bool:
     if orig != escape_string(orig):
         return True
@@ -74,10 +76,12 @@ def needs_punyencoding(orig: str) -> bool:
     return False
 
 
-f = open(sys.argv[1], 'rb')
+f = open(sys.argv[1], "rb")
 
-magic, disk_n, n_disks, _, _, volume_name, _, size = struct.unpack('>2x4sHHII32pII454x', f.read(0x200))
-assert magic == b'CMWL'
+magic, disk_n, n_disks, _, _, volume_name, _, size = struct.unpack(
+    ">2x4sHHII32pII454x", f.read(0x200)
+)
+assert magic == b"CMWL"
 
 # Skip boot blocks
 f.read(0x400)
@@ -85,8 +89,27 @@ f.read(0x400)
 size -= 0x600
 
 while size:
-    magic, _, _, _, filename, part_n, folder_flags, valid, tcode, ccode, flags, created, modified, data_length, resource_length, data_length_this_disk, resource_length_this_disk, path_length = struct.unpack('>2x4sHII32pHBB4s4sH24xIIIIIIH', f.read(0x70))
-    assert magic == b'RLDW'
+    (
+        magic,
+        _,
+        _,
+        _,
+        filename,
+        part_n,
+        folder_flags,
+        valid,
+        tcode,
+        ccode,
+        flags,
+        created,
+        modified,
+        data_length,
+        resource_length,
+        data_length_this_disk,
+        resource_length_this_disk,
+        path_length,
+    ) = struct.unpack(">2x4sHII32pHBB4s4sH24xIIIIIIH", f.read(0x70))
+    assert magic == b"RLDW"
     is_folder = folder_flags & (1 << 7) != 0
     full_path = f.read(path_length)
     data_fork = f.read(data_length_this_disk)
@@ -97,7 +120,7 @@ while size:
     size -= total_size + padding
 
     out_path = Path()
-    nix_path = Path(*full_path.decode('macroman').split(':'))
+    nix_path = Path(*full_path.decode("macroman").split(":"))
     for el in nix_path.parts:
         if needs_punyencoding(el):
             el = punyencode(el)
@@ -106,29 +129,48 @@ while size:
 
     os.makedirs(out_path if is_folder else out_path.parent, exist_ok=True)
 
-    print("writing to {} {}, part {}, df={} rf={}".format(" folder" if is_folder else "", out_path, part_n, len(data_fork), len(resource_fork)))
+    print(
+        "writing to {} {}, part {}, df={} rf={}".format(
+            " folder" if is_folder else "",
+            out_path,
+            part_n,
+            len(data_fork),
+            len(resource_fork),
+        )
+    )
 
     if not is_folder:
         if part_n > 1:
-            with open(out_path, 'ab') as of:
+            with open(out_path, "ab") as of:
                 if data_fork:
                     of.write(data_fork)
-                    of.write(b'\x00' * (-data_length % 128))
+                    of.write(b"\x00" * (-data_length % 128))
                 if resource_fork:
                     of.write(resource_fork)
-                    of.write(b'\x00' * (-resource_length % 128))
+                    of.write(b"\x00" * (-resource_length % 128))
 
         else:
-            with open(out_path, 'wb') as of:
-                of.write(file_to_macbin(data_length, resource_length, created, modified, tcode, ccode, flags, filename))
+            with open(out_path, "wb") as of:
+                of.write(
+                    file_to_macbin(
+                        data_length,
+                        resource_length,
+                        created,
+                        modified,
+                        tcode,
+                        ccode,
+                        flags,
+                        filename,
+                    )
+                )
                 if data_fork:
                     of.write(data_fork)
                     if data_length == data_length_this_disk:
-                        of.write(b'\x00' * (-data_length % 128))
+                        of.write(b"\x00" * (-data_length % 128))
                 if resource_fork:
                     of.write(resource_fork)
                     if resource_length == resource_length_this_disk:
-                        of.write(b'\x00' * (-resource_length % 128))
+                        of.write(b"\x00" * (-resource_length % 128))
 
     modified -= 2082844800
     os.utime(out_path, (modified, modified))

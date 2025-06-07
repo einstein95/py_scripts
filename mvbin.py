@@ -5,7 +5,7 @@ from shutil import move
 from sys import argv
 from typing import ByteString
 
-
+# fmt: off
 decode_map = {
     "81": ["　", "、", "。", "，", "．", "・", "：", "；", "？", "！", "゛", "゜", "´", "｀", "¨", "＾", "￣", "＿", "ヽ", "ヾ", "ゝ", "ゞ", "〃", "仝", "々", "〆", "〇", "ー", "—", "‐", "／", "＼", "〜", "‖", "｜", "…", "‥", "‘", "’", "“", "”", "（", "）", "〔", "〕", "［", "］", "｛", "｝", "〈", "〉", "《", "》", "「", "」", "『", "』", "【", "】", "＋", "−", "±", "×", None, "÷", "＝", "≠", "＜", "＞", "≦", "≧", "∞", "∴", "♂", "♀", "°", "′", "″", "℃", "￥", "＄", "¢", "£", "％", "＃", "＆", "＊", "＠", "§", "☆", "★", "○", "●", "◎", "◇", "◆", "□", "■", "△", "▲", "▽", "▼", "※", "〒", "→", "←", "↑", "↓", "〓", None, None, None, None, None, None, None, None, None, None, None, "∈", "∋", "⊆", "⊇", "⊂", "⊃", "∪", "∩", None, None, None, None, None, None, None, None, "∧", "∨", "¬", "⇒", "⇔", "∀", "∃", None, None, None, None, None, None, None, None, None, None, None, "∠", "⊥", "⌒", "∂", "∇", "≡", "≒", "≪", "≫", "√", "∽", "∝", "∵", "∫", "∬", None, None, None, None, None, None, None, "Å", "‰", "♯", "♭", "♪", "†", "‡", "¶", None, None, None, None, "◯"],
     "82": [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "０", "１", "２", "３", "４", "５", "６", "７", "８", "９", None, None, None, None, None, None, None, "Ａ", "Ｂ", "Ｃ", "Ｄ", "Ｅ", "Ｆ", "Ｇ", "Ｈ", "Ｉ", "Ｊ", "Ｋ", "Ｌ", "Ｍ", "Ｎ", "Ｏ", "Ｐ", "Ｑ", "Ｒ", "Ｓ", "Ｔ", "Ｕ", "Ｖ", "Ｗ", "Ｘ", "Ｙ", "Ｚ", None, None, None, None, None, None, None, "ａ", "ｂ", "ｃ", "ｄ", "ｅ", "ｆ", "ｇ", "ｈ", "ｉ", "ｊ", "ｋ", "ｌ", "ｍ", "ｎ", "ｏ", "ｐ", "ｑ", "ｒ", "ｓ", "ｔ", "ｕ", "ｖ", "ｗ", "ｘ", "ｙ", "ｚ", None, None, None, None, "ぁ", "あ", "ぃ", "い", "ぅ", "う", "ぇ", "え", "ぉ", "お", "か", "が", "き", "ぎ", "く", "ぐ", "け", "げ", "こ", "ご", "さ", "ざ", "し", "じ", "す", "ず", "せ", "ぜ", "そ", "ぞ", "た", "だ", "ち", "ぢ", "っ", "つ", "づ", "て", "で", "と", "ど", "な", "に", "ぬ", "ね", "の", "は", "ば", "ぱ", "ひ", "び", "ぴ", "ふ", "ぶ", "ぷ", "へ", "べ", "ぺ", "ほ", "ぼ", "ぽ", "ま", "み", "む", "め", "も", "ゃ", "や", "ゅ", "ゆ", "ょ", "よ", "ら", "り", "る", "れ", "ろ", "ゎ", "わ", "ゐ", "ゑ", "を", "ん"],
@@ -53,6 +53,7 @@ decode_map = {
     "ec": [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "ぁ", None, "ぃ", None, "ぅ", None, "ぇ", None, "ぉ", None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "っ", None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "ゃ", None, "ゅ", None, "ょ", None, None, None, None, None, None, "ゎ"],
     "ed": ["ァ", None, "ィ", None, "ゥ", None, "ェ", None, "ォ", None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "ッ", None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, "ャ", None, "ュ", None, "ョ", None, None, None, None, None, None, "ヮ", None, None, None, None, None, None, "ヵ", "ヶ"],
 }
+# fmt: on
 
 
 def decode_macjapanese(text: ByteString) -> str:
@@ -114,18 +115,14 @@ def needs_punyencoding(orig: str) -> bool:
 
 
 path, fn = split(argv[1])
-try:
-    if argv[2]:
-        japanese = True
-except IndexError:
-    japanese = False
+japanese = len(argv) > 2 and argv[2]
 
 try:
-    f = open(argv[1], 'rb')
+    f = open(argv[1], "rb")
 except IsADirectoryError:
     if needs_punyencoding(argv[1]):
-        of = escape_string(argv[1]).encode('punycode').decode('ascii')
-        of = 'xn--' + of
+        of = escape_string(argv[1]).encode("punycode").decode("ascii")
+        of = "xn--" + of
         print(argv[1], join(path, of))
         move(argv[1], join(path, of))
     exit()
@@ -133,37 +130,37 @@ except FileNotFoundError:
     exit()
 
 f.seek(0x1)
-nlen = int.from_bytes(f.read(1), 'big')
+nlen = int.from_bytes(f.read(1), "big")
 n = f.read(nlen)
 if japanese:
-    n = decode_macjapanese(n)
+    n = decode_macjapanese(n).encode("utf-8")
 else:
-    n = n.decode('mac-roman')
+    n = n.decode("mac-roman").encode("utf-8")
 
 f.seek(0x53)
-datalen = int.from_bytes(f.read(4), 'big')
+datalen = int.from_bytes(f.read(4), "big")
 f.seek(0x57)
-rsrclen = int.from_bytes(f.read(4), 'big')
+rsrclen = int.from_bytes(f.read(4), "big")
 f.seek(0x5F)
-mod_time = int.from_bytes(f.read(4), 'big') - 2082844800
+mod_time = int.from_bytes(f.read(4), "big") - 2082844800
 if not rsrclen:
     f.seek(0x41)
-    fn = argv[1].encode('utf-8', 'backslashreplace').decode('utf-8')
+    fn = argv[1].encode("utf-8", "backslashreplace").decode("utf-8")
     print(f'No rsrc in {fn}, removing MacBin header, {f.read(8).decode("mac-roman")}')
     f.seek(0x80)
     data = f.read(datalen)
     f.close()
-    open(argv[1], 'wb').write(data)
+    open(argv[1], "wb").write(data)
 else:
     f.close()
 
 utime(argv[1], (mod_time, mod_time))
 
-if needs_punyencoding(n):
-    of = escape_string(n).encode('punycode').decode('ascii')
-    of = 'xn--' + of
+if needs_punyencoding(n.decode("utf-8")):
+    of = escape_string(n.decode("utf-8")).encode("punycode").decode("ascii")
+    of = "xn--" + of
     if of != fn:
         print(argv[1], join(path, of))
         move(argv[1], join(path, of))
 elif n != fn:
-    move(argv[1], join(path, n))
+    move(argv[1], join(path, n.decode("utf-8")))

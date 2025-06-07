@@ -1,13 +1,26 @@
 #!/usr/bin/python3
+from os.path import splitext
 from struct import unpack
 from sys import argv
-from os.path import splitext
 
-f = open(argv[1], "rb")
-(dname,) = unpack("65p", f.read(65))
-print(dname.decode("mac-roman"))
-f.seek(0x40)
-(dsklen,) = unpack(">I", f.read(4))
-f.seek(0x54)
-with open(splitext(argv[1])[0] + ".dsk", "wb") as of:
-    of.write(f.read(dsklen))
+
+def main():
+    input_file = argv[1]
+
+    with open(input_file, "rb") as file:
+        # Read and decode disk name
+        disk_name = unpack("64p", file.read(64))[0]
+        print(disk_name.decode("mac-roman"))
+
+        # Read disk length
+        disk_length = unpack(">I", file.read(4))[0]
+
+        # Extract disk data
+        file.seek(0x54)
+        output_file = splitext(input_file)[0] + ".dsk"
+        with open(output_file, "wb") as output:
+            output.write(file.read(disk_length))
+
+
+if __name__ == "__main__":
+    main()

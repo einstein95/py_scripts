@@ -7,7 +7,9 @@ from sys import argv
 
 import lzss  # type: ignore
 
-with open(argv[1], "rb") as dir_file, open(argv[1].replace(".DIR", ".DAT"), "rb") as dat_file:
+with open(argv[1], "rb") as dir_file, open(
+    argv[1].replace(".DIR", ".DAT"), "rb"
+) as dat_file:
     while True:
         offset_bytes = dir_file.read(4)
         if not offset_bytes:

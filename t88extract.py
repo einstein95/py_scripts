@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Extracts files from a PC-8801 tape image in T88 format.
 # based on documentation at https://quagma.sakura.ne.jp/manuke/t88format.html
-from sys import argv
 from struct import unpack
+from sys import argv
 
 with open(argv[1], "rb") as t88_file:
     assert t88_file.read(24) == b"PC-8801 Tape Image(T88)\0"
@@ -28,7 +28,9 @@ with open(argv[1], "rb") as t88_file:
             start_time, length = unpack("<II", t88_file.read(8))
             print(f"Mark tag: {start_time} ticks, {length} ticks")
         elif tag == 0x101:  # Data tag (データタグ)
-            start_time, length, actual_len, actual_type = unpack("<IIHH", t88_file.read(12))
+            start_time, length, actual_len, actual_type = unpack(
+                "<IIHH", t88_file.read(12)
+            )
             # length -= 4
             data = t88_file.read(actual_len)
             print(f"Data tag: {start_time} ticks, {length} bytes")

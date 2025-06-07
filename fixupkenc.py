@@ -1,22 +1,21 @@
 #!/usr/bin/python
-from shutil import move
 from glob import glob
-from sys import argv
 from pathlib import Path
+from shutil import move
+from sys import argv
 
 # jp = cp932
 # eu = cp1252
-encoding = argv[1]
-files = [Path(i) for i in glob('**/*', recursive=True)]
-files = [i for i in files if i.is_file()]
+target_encoding = argv[1]
+all_files = [str(file) for file in Path().rglob("*") if file.is_file()]
 
-for file in files:
-    of = b""
-    for i in file:
-        if ord(i) > 0xDC00:
-            of += bytes([ord(i) - 0xDC00])
+for current_file in all_files:
+    output_filename_bytes = b""
+    for char in current_file:
+        if ord(char) > 0xDC00:
+            output_filename_bytes += bytes([ord(char) - 0xDC00])
         else:
-            of += i.encode("utf8")
-    of = of.replace(b"/", b"\\")
-    newfilename = of.decode(encoding)
-    move(file, newfilename)
+            output_filename_bytes += char.encode("utf8")
+    output_filename_bytes = output_filename_bytes.replace(b"/", b"\\")
+    new_filename = output_filename_bytes.decode(target_encoding)
+    move(current_file, new_filename)

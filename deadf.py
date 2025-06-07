@@ -24,52 +24,52 @@ from binascii import crc_hqx
 from urllib import parse
 
 
-def escape_string(s: str) -> str:
+def escape_string(input_string: str) -> str:
     """
     Escapes special characters in a string for MacBinary compatibility.
 
     Args:
-        s (str): The input string to escape.
+        input_string (str): The input string to escape.
 
     Returns:
         str: The escaped string.
     """
-    special_chars = '/":*|\\?%<>\x7f'
-    escaped_string = []
+    special_characters = '/":*|\\?%<>\x7f'
+    escaped_result = []
 
-    for char in s:
-        if char == "\x81":
-            escaped_string.append("\x81\x79")
-        elif char in special_chars or ord(char) < 0x20:
-            escaped_string.append("\x81" + chr(0x80 + ord(char)))
+    for character in input_string:
+        if character == "\x81":
+            escaped_result.append("\x81\x79")
+        elif character in special_characters or ord(character) < 0x20:
+            escaped_result.append("\x81" + chr(0x80 + ord(character)))
         else:
-            escaped_string.append(char)
+            escaped_result.append(character)
 
-    return "".join(escaped_string)
+    return "".join(escaped_result)
 
 
-def file_to_macbin(
-    datalen: int,
-    rsrclen: int,
-    create_date: int,
-    mod_date: int,
-    file_type: bytes,
-    creator: bytes,
-    flags: int,
-    name: bytes,
+def convert_to_macbinary(
+    data_fork_length: int,
+    resource_fork_length: int,
+    creation_date: int,
+    modification_date: int,
+    file_type_code: bytes,
+    creator_code: bytes,
+    file_flags: int,
+    file_name: bytes,
 ) -> bytes:
     """
     Converts file metadata to MacBinary format.
 
     Args:
-        datalen (int): The length of the data fork.
-        rsrclen (int): The length of the resource fork.
-        create_date (int): The file creation date in Mac timestamp format.
-        mod_date (int): The file modification date in Mac timestamp format.
-        file_type (bytes): A 4-byte string indicating the file type.
-        creator (bytes): A 4-byte string indicating the creator.
-        flags (int): File flags.
-        name (bytes): The name of the file as a byte string.
+        data_fork_length (int): The length of the data fork.
+        resource_fork_length (int): The length of the resource fork.
+        creation_date (int): The file creation date in Mac timestamp format.
+        modification_date (int): The file modification date in Mac timestamp format.
+        file_type_code (bytes): A 4-byte string indicating the file type.
+        creator_code (bytes): A 4-byte string indicating the creator.
+        file_flags (int): File flags.
+        file_name (bytes): The name of the file as a byte string.
 
     Returns:
         bytes: The file metadata in MacBinary format.
@@ -77,61 +77,61 @@ def file_to_macbin(
     The function packs the provided metadata into a MacBinary header,
     computes a CRC for error-checking, and returns the combined result.
     """
-    old_flags = (flags >> 8) & 0xFF
-    new_flags = flags & 0xFF
+    old_file_flags = (file_flags >> 8) & 0xFF
+    new_file_flags = file_flags & 0xFF
 
-    macbin_header = struct.pack(
+    macbinary_header = struct.pack(
         ">x64p4s4sBxHHHBxIIIIHB14xIHBB",
-        name,  # Filename (Pascal string)
-        file_type,  # File type
-        creator,  # Creator
-        old_flags,  # Finder flags (old)
+        file_name,  # Filename (Pascal string)
+        file_type_code,  # File type
+        creator_code,  # Creator
+        old_file_flags,  # Finder flags (old)
         0,  # Zeroed fields
         0,
         0,
-        old_flags & 0x80,  # Finder flags (old, locked bit)
-        datalen,  # Data fork length
-        rsrclen,  # Resource fork length
-        create_date,  # Creation date
-        mod_date,  # Modification date
+        old_file_flags & 0x80,  # Finder flags (old, locked bit)
+        data_fork_length,  # Data fork length
+        resource_fork_length,  # Resource fork length
+        creation_date,  # Creation date
+        modification_date,  # Modification date
         0,  # GetInfo length
-        new_flags,  # Finder flags (new)
+        new_file_flags,  # Finder flags (new)
         0,  # Zeroed fields
         0,
         129,  # Version number
         129,  # Minimum version needed to read the file
     )
 
-    crc = crc_hqx(macbin_header, 0)
-    macbin = macbin_header + struct.pack(">H2x", crc)
+    crc_checksum = crc_hqx(macbinary_header, 0)
+    macbinary_data = macbinary_header + struct.pack(">H2x", crc_checksum)
 
-    return macbin
+    return macbinary_data
 
 
-def punyencode(orig: str) -> str:
+def punycode_encode(original_string: str) -> str:
     """
     Encodes a string using Punycode, applying additional rules for special
     characters.
 
     Args:
-        orig (str): The original input string to encode.
+        original_string (str): The original input string to encode.
 
     Returns:
         str: The Punycode-encoded string with a prefix if necessary, or the
              original string.
     """
-    s = escape_string(orig)
-    encoded = s.encode("punycode").decode("ascii")
+    escaped_string = escape_string(original_string)
+    punycode_encoded = escaped_string.encode("punycode").decode("ascii")
 
     # Punycode encoding adds a '-' at the end when there are no special
     # characters. Remove trailing '-' for comparison purposes.
-    compare = encoded.rstrip("-")
+    comparison_string = punycode_encoded.rstrip("-")
 
     # Return the Punycode string prefixed with 'xn--' if the original and
     # comparison differ, or if the last character is a space or a dot.
-    if orig != compare or compare[-1] in " .":
-        return "xn--" + encoded
-    return orig
+    if original_string != comparison_string or comparison_string[-1] in " .":
+        return "xn--" + punycode_encoded
+    return original_string
 
 
 def main():
@@ -156,101 +156,110 @@ def main():
                         AppleDouble header.
         FileNotFoundError: If the specified data fork file cannot be found.
     """
-    parser = argparse.ArgumentParser(
+    argument_parser = argparse.ArgumentParser(
         description="Convert AppleDouble files to MacBinary"
     )
-    parser.add_argument("input_file", type=str, help="Input file")
-    parser.add_argument("data_fork", type=str, nargs="?", help="Data fork")
-    parser.add_argument(
+    argument_parser.add_argument("input_file", type=str, help="Input file")
+    argument_parser.add_argument("data_fork", type=str, nargs="?", help="Data fork")
+    argument_parser.add_argument(
         "--japanese", action="store_true", help="Japanese filename parsing"
     )
-    args = parser.parse_args()
+    arguments = argument_parser.parse_args()
 
-    with open(args.input_file, "rb") as f:
-        assert f.read(4) in [b"\x00\x05\x16\x07", b"\x00\x05\x16\x00"]
-        assert f.read(4) == b"\x00\x02\x00\x00"
-        f.seek(0x10, 1)
-        num_ent = struct.unpack(">H", f.read(2))[0]
+    with open(arguments.input_file, "rb") as input_file:
+        assert input_file.read(4) in [b"\x00\x05\x16\x07", b"\x00\x05\x16\x00"]
+        assert input_file.read(4) == b"\x00\x02\x00\x00"
+        input_file.seek(0x10, 1)
+        num_entries = struct.unpack(">H", input_file.read(2))[0]
 
-        entries = [struct.unpack(">III", f.read(0xC)) for _ in range(num_ent)]
+        entry_list = [
+            struct.unpack(">III", input_file.read(0xC)) for _ in range(num_entries)
+        ]
 
-        ent_data = {}
-        for ent_id, ent_off, ent_len in entries:
-            f.seek(ent_off)
-            ent_data[ent_id] = f.read(ent_len)
+        entry_data = {}
+        for entry_id, entry_offset, entry_length in entry_list:
+            input_file.seek(entry_offset)
+            entry_data[entry_id] = input_file.read(entry_length)
 
-    data_fork = ent_data.get(1, b"")
-    if not data_fork and args.data_fork:
+    data_fork_content = entry_data.get(1, b"")
+    if not data_fork_content and arguments.data_fork:
         try:
-            with open(args.data_fork, "rb") as df:
-                data_fork = df.read()
+            with open(arguments.data_fork, "rb") as data_fork_file:
+                data_fork_content = data_fork_file.read()
         except FileNotFoundError:
             pass
 
-    rsrc_fork = ent_data.get(2, b"")
-    file_name = ent_data.get(3, b"")
+    resource_fork_content = entry_data.get(2, b"")
+    file_name_content = entry_data.get(3, b"")
 
-    if not file_name:
-        file_name = os.path.basename(args.input_file).replace(".rsrc", "")
-        file_name = re.sub(r"^\._", "", file_name)
-        file_name = parse.unquote_to_bytes(file_name)
+    if not file_name_content:
+        file_name_content = os.path.basename(arguments.input_file).replace(".rsrc", "")
+        file_name_content = re.sub(r"^\._", "", file_name_content)
+        file_name_content = parse.unquote_to_bytes(file_name_content)
         try:
-            encoding = "shift-jis" if args.japanese else "mac-roman"
-            file_name = file_name.decode("utf-8").encode(encoding)
+            encoding_type = "shift-jis" if arguments.japanese else "mac-roman"
+            file_name_content = file_name_content.decode("utf-8").encode(encoding_type)
         except UnicodeDecodeError:
             pass
 
     try:
-        crtime, modtime = struct.unpack(">ii8x", ent_data.get(8, b""))
-        crtime += 3029529600  # AppleDouble is seconds from 2000-01-01
-        modtime += 3029529600
+        creation_time, modification_time = struct.unpack(
+            ">ii8x", entry_data.get(8, b"")
+        )
+        creation_time += 3029529600  # AppleDouble is seconds from 2000-01-01
+        modification_time += 3029529600
     except (TypeError, struct.error):
-        statinfo = os.stat(args.input_file)
-        crtime = int(statinfo.st_ctime) + 2082844800
-        modtime = int(statinfo.st_mtime) + 2082844800
+        file_stat_info = os.stat(arguments.input_file)
+        creation_time = int(file_stat_info.st_ctime) + 2082844800
+        modification_time = int(file_stat_info.st_mtime) + 2082844800
 
-    data = ent_data.get(9, b"XXXXXXXXXX")
-    file_type, fcreator, fflags = struct.unpack(">4s4sH", data[:10])
+    finder_info = entry_data.get(9, b"XXXXXXXXXX")
+    file_type_code, creator_code, finder_flags = struct.unpack(
+        ">4s4sH", finder_info[:10]
+    )
 
-    file_name_decoded = file_name.decode(
-        "shift-jis" if args.japanese else "macroman"
+    decoded_file_name = file_name_content.decode(
+        "shift-jis" if arguments.japanese else "macroman"
     )
     print(
-        file_name_decoded,
-        len(data_fork),
-        len(rsrc_fork),
-        crtime,
-        modtime,
-        file_type,
-        fcreator,
-        fflags,
+        decoded_file_name,
+        len(data_fork_content),
+        len(resource_fork_content),
+        creation_time,
+        modification_time,
+        file_type_code,
+        creator_code,
+        finder_flags,
     )
 
-    outfile_name = os.path.join(
-        os.path.dirname(args.input_file), f"{file_name_decoded}.bin"
+    output_file_name = os.path.join(
+        os.path.dirname(arguments.input_file), f"{decoded_file_name}.bin"
     )
 
-    with open(outfile_name, "wb") as out_file:
-        out_file.write(
-            file_to_macbin(
-                len(data_fork),
-                len(rsrc_fork),
-                crtime,
-                (modtime if modtime > 0 else 0),
-                file_type,
-                fcreator,
-                fflags,
-                file_name,
+    with open(output_file_name, "wb") as output_file:
+        output_file.write(
+            convert_to_macbinary(
+                len(data_fork_content),
+                len(resource_fork_content),
+                creation_time,
+                (modification_time if modification_time > 0 else 0),
+                file_type_code,
+                creator_code,
+                finder_flags,
+                file_name_content,
             )
         )
-        if data_fork:
-            out_file.write(data_fork)
-            out_file.write(b"\x00" * (-len(data_fork) % 128))
-        if rsrc_fork:
-            out_file.write(rsrc_fork)
-            out_file.write(b"\x00" * (-len(rsrc_fork) % 128))
+        if data_fork_content:
+            output_file.write(data_fork_content)
+            output_file.write(b"\x00" * (-len(data_fork_content) % 128))
+        if resource_fork_content:
+            output_file.write(resource_fork_content)
+            output_file.write(b"\x00" * (-len(resource_fork_content) % 128))
 
-    os.utime(outfile_name, (modtime - 2082844800, modtime - 2082844800))
+    os.utime(
+        output_file_name,
+        (modification_time - 2082844800, modification_time - 2082844800),
+    )
 
 
 if __name__ == "__main__":

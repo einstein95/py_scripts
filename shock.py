@@ -179,10 +179,7 @@ def main() -> None:
         temp_file.seek(8)
         file_type = temp_file.read_tag()
 
-        extension_mapping = {
-            ".dir": [".dxr", ".dcr"],
-            ".cst": [".cxt", ".cct"]
-        }
+        extension_mapping = {".dir": [".dxr", ".dcr"], ".cst": [".cxt", ".cct"]}
         if output_name[-4] == ".":
             output_name_ext = output_name[-4:].lower()
         else:

@@ -1,17 +1,19 @@
 #!/usr/bin/python
+import pathlib
 from glob import glob
 from sys import argv
-import pathlib
 
 # jp = cp932
 # eu = cp1252
-encoding = argv[1]
-files = [pathlib.Path(i) for i in glob('**/*', recursive=True)]
-files = [i for i in files if i.is_file()]
-for i in files:
+target_encoding = argv[1]
+all_files = [pathlib.Path(file) for file in glob("**/*", recursive=True)]
+all_files = [file for file in all_files if file.is_file()]
+for file in all_files:
     try:
-        newfilename = pathlib.PureWindowsPath(str(i).replace('/','\\').encode('latin1').decode(encoding))
+        new_file_name = pathlib.PureWindowsPath(
+            str(file).replace("/", "\\").encode("latin1").decode(target_encoding)
+        )
     except UnicodeEncodeError:
         continue
-    pathlib.Path(newfilename.parent.as_posix()).mkdir(parents=True, exist_ok=True)
-    i.rename(newfilename.as_posix())
+    pathlib.Path(new_file_name.parent.as_posix()).mkdir(parents=True, exist_ok=True)
+    file.rename(new_file_name.as_posix())

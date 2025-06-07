@@ -13,5 +13,7 @@ serial_number = generate_serial_number()
 registration_code = compute_registration_code(serial_number)
 
 print(f"Serial Number: {serial_number}\nRegistration Code: {registration_code}")
-with open("data.nsd", "w", encoding="utf-8") as file:
-    file.write(f"[#mySerialNumber: {serial_number}, #myRegistrationNumber: \"{registration_code}\"]\r")
+with open("data.nsd", "w", encoding="macroman") as file:
+    file.write(
+        f'[#mySerialNumber: {serial_number}, #myRegistrationNumber: "{registration_code}"]\r'
+    )

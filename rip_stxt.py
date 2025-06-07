@@ -15,7 +15,7 @@ for file in files:
             f.write(d.decode("mac-roman").replace("\r", "\n"))
     elif file.startswith("XMED-"):
         with open(file, "rb") as f:
-            _, _, filelen = unpack('>III', f.read(12))
+            _, _, filelen = unpack(">III", f.read(12))
             d = f.read(filelen)
 
         with open(file.replace(".bin", ".swf"), "wb") as f:
