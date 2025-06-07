@@ -1,6 +1,7 @@
 import json
 import requests
 
+
 def fetch_games():
     games = []
     params = {
@@ -24,6 +25,7 @@ def fetch_games():
         games.extend(data["results"])
 
     return games
+
 
 if __name__ == "__main__":
     games = fetch_games()

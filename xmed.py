@@ -2,6 +2,7 @@ import os
 from struct import unpack
 from sys import argv
 
+
 def process_binary_file(input_file):
     with open(input_file, "rb") as infile:
         unknown, data_size = unpack(">4xII", infile.read(12))
@@ -16,6 +17,7 @@ def process_binary_file(input_file):
             outfile.write(infile.read(data_size))
 
     os.remove(input_file)
+
 
 if __name__ == "__main__":
     if len(argv) != 2:
