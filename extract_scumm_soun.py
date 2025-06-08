@@ -16,14 +16,24 @@ def extract_bundle(input_file: str) -> None:
             input_file = base
 
         file_type, file_size = unpack(">4sI", f.read(8))
-        if file_type not in (b"SOUN", b"TLKB"):
+        if file_type == b"FILE":
+            file_size = f.seek(0, 2)
+            f.seek(0)
+            while f.tell() < file_size:
+                extract_file(f)
+        elif file_type not in (b"SOUN", b"TLKB"):
             extract_sdat(input_file, f)
+        elif input_file.startswith("SOUN_"):
+            extract_sdat(input_file, f, extract_only_first_file=True)
         else:
             while f.tell() < file_size:
+                print(f.tell(), file_size)
                 extract_sdat(f"{input_file}-{f.tell():08x}", f)
 
 
-def extract_sdat(filename: str, f: BufferedReader) -> None:
+def extract_sdat(
+    filename: str, f: BufferedReader, extract_only_first_file=False
+) -> None:
     file_subtype, _ = unpack(">4sI", f.read(8))
     file_subtype = file_subtype.decode()
 
@@ -33,7 +43,10 @@ def extract_sdat(filename: str, f: BufferedReader) -> None:
             break
         f.seek(chunk_size - 8, 1)
 
-    data = f.read(chunk_size - 8)
+    if extract_only_first_file:
+        data = f.read()
+    else:
+        data = f.read(chunk_size - 8)
     output_file = None
 
     if file_subtype in ("DIGI", "TALK"):
@@ -62,6 +75,15 @@ def extract_sdat(filename: str, f: BufferedReader) -> None:
             out_f.write(data)
 
     print(f"Extracted SDAT chunk to {output_file}")
+
+
+def extract_file(f: BufferedReader) -> None:
+    tag, size = unpack(">4sI", f.read(8))
+    assert tag == b"FILE", f"Expected 'FILE' tag, got {tag}"
+    filename = f.read(13).decode().rstrip("\x00")
+    print(f"Extracting {filename} ({size} bytes)")
+    with open(filename, "wb") as out_f:
+        out_f.write(f.read(size - 21))
 
 
 def main():
