@@ -180,10 +180,11 @@ def main() -> None:
         file_type = temp_file.read_tag()
 
         extension_mapping = {".dir": [".dxr", ".dcr"], ".cst": [".cxt", ".cct"]}
-        if output_name[-4] == ".":
-            output_name_ext = output_name[-4:].lower()
-        else:
+        extensions = [i for k, v in extension_mapping.items() for i in [k] + v]
+        if not output_name[-4:].lower() in extensions or output_name[-4] != ".":
             output_name_ext = ".dir"
+        else:
+            output_name_ext = output_name[-4:].lower()
 
         if output_name_ext in extension_mapping:
             if file_type == "MV93":
@@ -193,7 +194,10 @@ def main() -> None:
             if output_name[-4:].isupper():
                 output_name_ext = output_name_ext.upper()
 
-        output_name = output_name[:-4] + output_name_ext
+        if len(output_name) < 4:
+            output_name = output_name + output_name_ext
+        else:
+            output_name = output_name[:-4] + output_name_ext
         output_name = output_name.replace("/", "_")
 
         if file_type in ["FGDM", "FGDC"]:

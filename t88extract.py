@@ -5,10 +5,16 @@ from struct import unpack
 from sys import argv
 
 with open(argv[1], "rb") as t88_file:
+    file_open = False
+    file_num = 0
     assert t88_file.read(24) == b"PC-8801 Tape Image(T88)\0"
     while True:
         tag, size = unpack("<HH", t88_file.read(4))
         if tag == 0:  # End tag (終了タグ)
+            print(f"End tag @ {t88_file.tell() - 4:#x}")
+            remainder = t88_file.read()
+            if remainder:
+                print(f"Leftover bytes found: {remainder.hex()}")
             t88_file.close()
             break
         elif tag == 1:  # Version tag (バージョンタグ)
@@ -40,7 +46,13 @@ with open(argv[1], "rb") as t88_file:
                 filename = data[0xA:].decode("utf-8").rstrip("\x00")
                 print(f"  Filename: {filename}")
                 f = open(filename, "wb")
+                file_open = True
             else:
+                if not file_open:
+                    f = open(f"DATA{file_num}.bin", "wb")
+                    file_num += 1
+                if not f:
+                    raise ValueError("File open for writing but not open, how???")
                 f.write(data)
         else:
             print(f"Unknown tag: {tag} @ 0x{t88_file.tell():x}")

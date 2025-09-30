@@ -3,8 +3,10 @@ import argparse
 import re
 
 import requests
-from html2phpbbcode.parser import HTML2PHPBBCode
+from md2bbcode.main import process_html
 from unidecode import unidecode
+
+# from html2phpbbcode.parser import HTML2PHPBBCode
 
 
 def main():
@@ -22,15 +24,17 @@ def main():
     if "steam" in args.appid:
         args.appid = re.search(r"/app/(\d+)", args.appid).group(1)
 
-    p = HTML2PHPBBCode()
+    # p = HTML2PHPBBCode()
     r = requests.get(
         f"https://store.steampowered.com/api/appdetails",
         params={"appids": args.appid, "l": args.lang},
     )
     desc = r.json()[args.appid]["data"]["about_the_game"]
+    print(desc)
     if args.lang == "english":
         desc = unidecode(desc)
-    print(p.feed(desc))
+    # print(p.feed(desc))
+    print(process_html(desc))
     print(f"\n[From [url=https://store.steampowered.com/app/{args.appid}/]Steam[/url]]")
 
     r = requests.get(

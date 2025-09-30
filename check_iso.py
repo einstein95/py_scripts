@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 from io import BytesIO
 from struct import unpack
 from sys import argv
@@ -49,8 +49,9 @@ if mac_signature_2 == APPLE_PARTITION_SIGNATURE:
             # Move onto the next partition
             partition_index += 1
             file_obj.seek(partition_index * SECTOR_SIZE + 4)
+
 # Bootable Mac-only disc
-elif mac_signature_1 == b"LK\x60\x00" and mac_signature_3 == b"BD":
+elif mac_signature_1 == b"LK\x60\x00" or mac_signature_3 == b"BD":
     detected_formats.append("Mac")
 
 print(f'{"/".join(detected_formats)}\t{argv[1]}')

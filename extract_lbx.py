@@ -1,6 +1,6 @@
 import sys
-from struct import error, unpack
 from pathlib import Path
+from struct import error, unpack
 
 
 def extract_lbx(lbx_path, output_dir):
