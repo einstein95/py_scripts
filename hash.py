@@ -1,7 +1,6 @@
-# Parse iNES header and print sha1sum of PRG and CHR ROMs
+# Checksum ROM files and print their size, crc32, md5, sha1, and sha256 hashes.
 
 import hashlib
-import os
 import sys
 import zlib
 
