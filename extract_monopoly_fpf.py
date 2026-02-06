@@ -1,7 +1,10 @@
-#!/usr/bin/env python3
 from pathlib import Path
 from struct import unpack
 from sys import argv
+
+# pip install lzss
+# https://pypi.org/project/lzss/
+from lzss import decompress  # type: ignore
 
 
 def detect_extension(data: bytes) -> str:
@@ -26,38 +29,39 @@ def main():
     output_dir = Path(argv[2]) if len(argv) > 2 else Path("extracted")
 
     with open(input_path, "rb") as f:
-        # Validate header
-        if f.read(8) != b"Axia DAT":
-            print("Error: Invalid file format")
-            exit(1)
-
-        # Read metadata
         num_files = unpack("<I", f.read(4))[0]
+        f.read(2)
         file_offsets = unpack(f"<{num_files}I", f.read(num_files * 4))
-
         print(f"Found {num_files} files in archive")
-
-        # Create output directory
         output_dir.mkdir(exist_ok=True)
-
-        # Get file size for last file calculation
         f.seek(0, 2)
         file_size = f.tell()
-
-        # Extract files
         for i in range(num_files):
-            start = file_offsets[i]
-            size = (file_offsets[i + 1] if i < num_files - 1 else file_size) - start
+            offset = file_offsets[i]
+
+            # Check if uncompressed flag is set
+            is_uncompressed = offset & 0x40000000
+            offset &= 0x3FFFFFFF  # Mask off compression flag
+            start = offset + 4  # +4 to strip decompressed size
+            next_offset = (
+                file_offsets[i + 1] & 0x3FFFFFFF if i < num_files - 1 else file_size
+            )
+            size = next_offset - start
 
             # Read file data
             f.seek(start)
             data = f.read(size)
 
+            # Decompress if needed
+            if not is_uncompressed:
+                data = decompress(data)
+
             # Determine extension and write file
             output_file = output_dir / f"file_{i:04d}{detect_extension(data)}"
             output_file.write_bytes(data)
 
-            print(f"{output_file.name} ({size:,})")
+            comp_status = ("un" if is_uncompressed else "") + "compressed"
+            print(f"{output_file.name} ({size:,} bytes, {comp_status})")
 
     print(f"\nExtraction complete! {num_files} files extracted to '{output_dir}'")
 

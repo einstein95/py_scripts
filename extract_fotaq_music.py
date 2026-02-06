@@ -14,6 +14,8 @@ def detect_extension(data: bytes) -> str:
         return ".uni"
     if data.startswith(b"Creative Voice File"):
         return ".voc"
+    if data.startswith(b"MThd"):
+        return ".mid"
     return ".bin"
 
 
@@ -26,14 +28,13 @@ def main():
     output_dir = Path(argv[2]) if len(argv) > 2 else Path("extracted")
 
     with open(input_path, "rb") as f:
-        # Validate header
-        if f.read(8) != b"Axia DAT":
-            print("Error: Invalid file format")
-            exit(1)
-
         # Read metadata
-        num_files = unpack("<I", f.read(4))[0]
-        file_offsets = unpack(f"<{num_files}I", f.read(num_files * 4))
+        num_files = unpack("<H", f.read(2))[0]
+        offsets = unpack(f"<{num_files*2}H", f.read(num_files * 4))
+        file_offsets = []
+        for i in range(0, num_files * 2, 2):
+            file_offsets.append(offsets[i + 1] << 4 | offsets[i])
+        print([hex(i) for i in file_offsets])
 
         print(f"Found {num_files} files in archive")
 

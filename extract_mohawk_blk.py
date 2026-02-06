@@ -5,9 +5,10 @@ import sys
 def read_resource_block(blockFile, output_dir, file_type):
     blockFile.seek(2, 1)
     count = struct.unpack("<H", blockFile.read(2))[0]
+    print(count, hex(blockFile.tell()))
     blockFile.seek(2, 1)
     type_ = blockFile.read(4)
-    assert type_ == b"FLEX", "Invalid block type, expected 'FLEX'"
+    assert type_ == b"FLEX", f"Invalid block type, expected 'FLEX', got {type_}"
 
     for i in range(count):
         if not file_type == "pic":
