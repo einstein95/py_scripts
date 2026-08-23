@@ -6,7 +6,7 @@ from sys import argv
 
 p = Path(argv[1])
 z = zipfile.ZipFile(p)
-f = BytesIO(z.read(p.name))
+f = BytesIO(z.read(z.filelist[0].filename))
 
 unk1, unk2, numFiles = unpack("<III", f.read(0xC))
 print(f"{unk1=}, {unk2=}, {numFiles=}")

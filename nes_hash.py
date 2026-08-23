@@ -1,5 +1,5 @@
+#!/usr/bin/env python3
 # Parse iNES header and print sha1sum of PRG and CHR ROMs
-
 import hashlib
 import os
 import sys
@@ -10,11 +10,35 @@ def parse_ines_header(rom_data):
     if rom_data[0:4] != b"NES\x1a":
         raise ValueError("Not a valid iNES file")
 
-    prg_size = rom_data[4] * 16384  # PRG ROM size in bytes
-    chr_size = rom_data[5] * 8192  # CHR ROM size in bytes
-
     has_trainer = rom_data[6] & 0x04
     trainer_size = 512 if has_trainer else 0
+
+    is_nes2 = (rom_data[7] & 0x0C) == 0x08
+    if is_nes2:
+        prg_msb = rom_data[9] & 0x0F
+        prg_lsb = rom_data[4]
+
+        if prg_msb == 0xF:
+            # Exponent-multiplier notation
+            exponent = (prg_lsb >> 2) & 0x3F
+            multiplier = prg_lsb & 0x03
+            prg_size = (2**exponent) * (multiplier * 2 + 1)
+        else:
+            # Simple notation: 12-bit value in 16 KiB units
+            prg_size = ((prg_msb << 8) | prg_lsb) * 16384
+
+        chr_msb = (rom_data[9] >> 4) & 0x0F
+        chr_lsb = rom_data[5]
+
+        if chr_msb == 0xF:
+            exponent = (chr_lsb >> 2) & 0x3F
+            multiplier = chr_lsb & 0x03
+            chr_size = (2**exponent) * (multiplier * 2 + 1)
+        else:
+            chr_size = ((chr_msb << 8) | chr_lsb) * 8192
+    else:
+        prg_size = rom_data[4] * 16384
+        chr_size = rom_data[5] * 8192
 
     prg_start = 16 + trainer_size
     prg_end = prg_start + prg_size
@@ -90,6 +114,9 @@ def main():
         if chr_rom:
             print(
                 f"CHR size:{human_readable_size(len(chr_rom))} crc32:{crc32sum(chr_rom)} md5:{md5sum(chr_rom)} sha1:{sha1sum(chr_rom)} sha256:{sha256sum(chr_rom)}"
+            )
+            print(
+                f"Combined crc32:{crc32sum(prg_rom + chr_rom)} md5:{md5sum(prg_rom + chr_rom)} sha1:{sha1sum(prg_rom + chr_rom)} sha256:{sha256sum(prg_rom + chr_rom)}"
             )
         if len(sys.argv) > 2:
             print()  # Add a blank line between multiple files

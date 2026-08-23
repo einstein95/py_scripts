@@ -48,9 +48,10 @@ def main():
         with open(file_path, "rb") as f:
             rom_data = f.read()
 
-        print(
-            f"{file_path}: size:{human_readable_size(len(rom_data))} crc32:{crc32sum(rom_data)} md5:{md5sum(rom_data)} sha1:{sha1sum(rom_data)} sha256:{sha256sum(rom_data)}"
-        )
+    size = len(rom_data)
+    print(
+        f"{file_path}: size:{human_readable_size(size)} crc32:{crc32sum(rom_data)} md5:{md5sum(rom_data)} sha1:{sha1sum(rom_data)} sha256:{sha256sum(rom_data)}"
+    )
 
 
 if __name__ == "__main__":

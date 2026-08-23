@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Extracts files from a PC-8801 tape image in T88 format.
 # based on documentation at https://quagma.sakura.ne.jp/manuke/t88format.html
+import os
 from datetime import timedelta
 from io import BufferedWriter
 from struct import unpack
@@ -69,7 +70,7 @@ with open(argv[1], "rb") as t88_file:
             print(f"  Actual length: {actual_len} bytes")
             print(f"  Baud rate: {actual_type}")
             data = t88_file.read(actual_len)
-            # print(data[:0x10].hex())
+            print(data[:0x10].hex())
             has_filename = False
             if data[:0xA] == b"\xd3" * 0xA:  ## BASIC file?
                 data = data[0xA:]
@@ -79,10 +80,32 @@ with open(argv[1], "rb") as t88_file:
                 has_filename = True
 
             if has_filename:
+                print(data.hex())
                 if f:
                     f.close()
-                filename = data.decode("utf-8").rstrip("\x00").rstrip()
+                try:
+                    filename = data.decode("utf-8")
+                except UnicodeDecodeError:
+                    try:
+                        filename = data.decode("shift_jis")
+                    except UnicodeDecodeError:
+                        filename = f"{data.rstrip(b"\x00").hex()}.bin"
+                filename = filename.rstrip("\x00")  # .rstrip()
+                if not filename.isprintable():
+                    filename = (
+                        f"{filename.encode('utf-8', 'backslashreplace').hex()}.bin"
+                    )
                 print(f"  Filename: {filename}")
+                n = 1
+                while os.path.exists(filename):
+                    parts = filename.rsplit(".", 1)
+                    ext = parts[1] if len(parts) > 1 else ""
+                    new_filename = parts[0] + f"_dup{n}" + ("." + ext if ext else "")
+                    if not os.path.exists(new_filename):
+                        filename = new_filename
+                        break
+                    n += 1
+                print(f"  Final filename: {filename}")
                 f = open(filename, "wb")
                 file_open = True
             else:

@@ -23,6 +23,10 @@ def dos_to_unix_time(dos_date, dos_time):
     minutes = (dos_time >> 5) & 0x3F
     hours = (dos_time >> 11) & 0x1F
 
+    print(f"{dos_date=} = {year=} {month=} {day=} {hours=} {minutes=} {seconds=}")
+    if month > 12 or day > 31 or hours > 23 or minutes > 59 or seconds > 59:
+        year, month, day, hours, minutes, seconds = (1970, 1, 1, 0, 0, 0)
+
     dt = datetime.datetime(
         year, month, day, hours, minutes, seconds, tzinfo=datetime.timezone.utc
     )

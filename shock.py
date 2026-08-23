@@ -2,10 +2,12 @@
 """
 Extracts Director movies from a Projector
 """
+
 import os
 import re
 import sys
 from io import BytesIO
+from pathlib import Path
 from struct import pack, unpack
 from typing import Literal
 from zlib import decompress
@@ -15,6 +17,7 @@ ENDIAN = Literal["<"] | Literal[">"] | Literal[""]
 IMAP_POS = 0xC
 INT_MMAP_POS = 0x18
 MMAP_POS = 0x2C
+MMAP_RESS_POS = MMAP_POS + 0x20
 
 
 class EndianReader(BytesIO):
@@ -102,9 +105,8 @@ def main() -> None:
         print("Usage: shock.py <input_file>")
         sys.exit(1)
 
-    input_file_path = sys.argv[1]
-    with open(input_file_path, "rb") as input_file:
-        data = input_file.read()
+    input_file_path = Path(sys.argv[1])
+    data = input_file_path.read_bytes()
 
     win_file = re.search(rb"XFIR.{4}LPPA", data, re.S)
     mac_file = re.search(rb"RIFX.{4}APPL", data, re.S)
@@ -133,15 +135,14 @@ def main() -> None:
     mmap_res_len = file_stream.read_i16()
     file_stream.seek(MMAP_POS + 0x10)
     mmap_res_count = file_stream.read_i32()
-    mmap_ress_pos = MMAP_POS + 0x20
-    file_stream.seek(mmap_ress_pos + 8)
+    file_stream.seek(MMAP_RESS_POS + 8)
     rel = file_stream.read_i32()
 
     files = []
     names = []
 
     for i in range(mmap_res_count):
-        file_stream.seek((i * mmap_res_len) + mmap_ress_pos)
+        file_stream.seek((i * mmap_res_len) + MMAP_RESS_POS)
         tag = file_stream.read_tag()
         size = file_stream.read_i32()
         chunk_offset = file_stream.read_i32()
@@ -154,27 +155,28 @@ def main() -> None:
         elif tag == "Dict":
             file_stream.seek(chunk_offset)
             names = parse_dict(file_stream.read(size), endian)
+        else:
+            print(f"Skipping {tag:<4}-{i}")
 
     file_table = zip(names, files)
-    out_folder, _ = os.path.splitext(input_file_path)
+    out_folder = input_file_path.with_name(input_file_path.stem)
     if out_folder == input_file_path:
-        out_folder += "_out"
+        out_folder = out_folder.with_name(out_folder.name + "_out")
 
-    os.makedirs(out_folder, exist_ok=True)
+    out_folder.mkdir(exist_ok=True)
 
-    for name, file in file_table:
+    for name, (offset, size) in file_table:
         path_sep = "\\" if win_file else ":"
-        pattern = rf"([^{re.escape(path_sep)}]+)$"
-        match = re.search(pattern, name)
-        output_name = match.group(1) if match else name
+        path = Path(*name.split(path_sep))
+        output_name = path.name
 
-        offset, _ = file
         print(f"Original file path: {os.path.join(name)} @ 0x{offset:x}")
 
         file_stream.seek(offset + 4)
-        size = file_stream.read_i32() + 8
+        file_size = file_stream.read_i32() + 8
         file_stream.seek(offset)
-        temp_file = EndianReader(file_stream.read(size))
+        file_data = file_stream.read(file_size)
+        temp_file = EndianReader(file_data)
         temp_file.read_ident()
         temp_file.seek(8)
         file_type = temp_file.read_tag()
@@ -187,14 +189,25 @@ def main() -> None:
             output_name_ext = output_name[-4:].lower()
 
         if output_name_ext in extension_mapping:
-            if file_type == "MV93":
-                output_name_ext = extension_mapping[output_name_ext][0]
-            elif file_type == "FGDM":
-                output_name_ext = extension_mapping[output_name_ext][1]
-            if output_name[-4:].isupper():
+            match file_type:
+                case "MV93":
+                    output_name_ext = extension_mapping[output_name_ext][0]
+                case "FGDM" | "FGDC":
+                    output_name_ext = extension_mapping[output_name_ext][1]
+                case "Xtra":
+                    output_name_ext = ""
+                case _:
+                    print(
+                        f"Unknown file type {file_type} for {output_name}, defaulting to .dir"
+                    )
+                    output_name_ext = ".dir"
+
+            if output_name[-4] == "." and output_name[-4:].isupper():
                 output_name_ext = output_name_ext.upper()
 
         if len(output_name) < 4:
+            output_name = output_name + output_name_ext
+        elif not output_name[-4:].lower() in extensions or output_name[-4] != ".":
             output_name = output_name + output_name_ext
         else:
             output_name = output_name[:-4] + output_name_ext
@@ -202,33 +215,63 @@ def main() -> None:
 
         if file_type in ["FGDM", "FGDC"]:
             temp_file.seek(0)
-            with open(os.path.join(out_folder, output_name), "wb") as f:
-                f.write(temp_file.read())
+            Path(out_folder, output_name).write_bytes(temp_file.read())
             continue
 
-        if file_type == "Xtra":
+        elif file_type == "Xtra":
             pos = temp_file.tell()
             if temp_file.read(1) != b"\x00":
                 temp_file.seek(pos)
             tag = ""
             size = 0
-            while tag not in ["XTdf", "FILE"]:
+            while (tag := temp_file.read_tag()) not in ["XTdf", "FILE"]:
+                size = temp_file.read_i32()
+                size += -size % 2
                 if tag == "Xinf":
                     # TODO: Figure out what this is
                     print(temp_file.read(size).hex())
-                    size = 0
-                temp_file.read(size)
-                tag = temp_file.read_tag()
-                size = temp_file.read_i32()
-                size += -size % 2
-                if tag == "FILE":
-                    temp_file.read(0x1C)
-            if size:
-                decompressed_data = decompress(temp_file.read(size))
-                with open(os.path.join(out_folder, output_name), "wb") as f:
-                    f.write(decompressed_data)
+                else:
+                    temp_file.read(size)
+
+            if tag == "FILE":
+                subheader_len = temp_file.read_i32()
+                if subheader_len and subheader_len < 0x1C:
+                    print(f"Subheader length: {subheader_len}")
+                    subheader_data = temp_file.read(subheader_len - 4)
+                    print(f"Subheader data: {subheader_data.hex()}")
+                else:
+                    temp_file.seek(4, 1)
+                    tag1 = temp_file.read_tag()
+                    tag2 = temp_file.read_tag()
+                    dec_size = temp_file.read_i32()
+                    dec_res_size = temp_file.read_i32()
+                    comp_size = temp_file.read_i32()
+                    comp_res_size = temp_file.read_i32()
+                    comp_data = temp_file.read(comp_size)
+                    comp_res_data = temp_file.read(comp_res_size)
+                    if comp_size != dec_size:
+                        decomp_data = decompress(comp_data)
+                    else:
+                        decomp_data = comp_data
+                    if comp_res_size != dec_res_size:
+                        decomp_res_data = decompress(comp_res_data)
+                    else:
+                        decomp_res_data = comp_res_data
+                    assert len(decomp_data) == dec_size
+                    assert len(decomp_res_data) == dec_res_size
+                    if decomp_data:
+                        Path(out_folder, output_name).write_bytes(decomp_data)
+                    if decomp_res_data:
+                        Path(out_folder, output_name + ".rsrc").write_bytes(
+                            decomp_res_data
+                        )
+            elif size:
+                compressed_data = temp_file.read(size)
+                decompressed_data = decompress(compressed_data)
+                Path(out_folder, output_name).write_bytes(decompressed_data)
             else:
-                temp_file.read(size)
+                temp_file.seek(size, 1)
+
             continue
 
         temp_file.seek(0x36)
@@ -241,10 +284,13 @@ def main() -> None:
         temp_file.write_i32(MMAP_POS)
 
         for i in range(mmap_res):
-            pos = 0x68 + (i * mmap_res_len)
+            pos = (i * mmap_res_len) + 0x68
             temp_file.seek(pos)
             absolute = temp_file.read_i32()
-            if absolute:
+            if absolute and absolute > relative:
+                print(
+                    f"Relocating resource {i}: {absolute:#x} -> {absolute - relative:#x}"
+                )
                 absolute -= relative
                 temp_file.seek(pos)
                 temp_file.write_i32(absolute)
@@ -257,11 +303,10 @@ def main() -> None:
         temp_file.seek(0)
         output_name_orig = output_name
         i = 0
-        while os.path.exists(os.path.join(out_folder, output_name)):
+        while (p := Path(out_folder, output_name)).exists():
             i += 1
             output_name = f"{output_name_orig}_{i}"
-        with open(os.path.join(out_folder, output_name), "wb") as f:
-            f.write(temp_file.read())
+        p.write_bytes(temp_file.read())
 
 
 if __name__ == "__main__":

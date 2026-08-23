@@ -12,9 +12,13 @@ if not files:
 for f in files:
     with open(f, "rb") as file:
         b = blake3(file.read()).hexdigest()
+
     r = requests.get(
         f"https://discmaster.textfiles.com/search?b3sum={b}&outputAs=json"
     ).json()
     filenames = [i["filename"] for i in r]
+    if not filenames:
+        print(f"No match found for {f} (hash: {b})")
+        continue
     filename = max(set(filenames), key=filenames.count)
     shutil.move(f, filename)
