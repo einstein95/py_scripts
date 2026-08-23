@@ -38,6 +38,49 @@ if not r.ok:
     exit(1)
 
 j = r.json()
-if "data" in j and j["data"]["status"] == 1:
-    print(j["data"]["name"])
-    print(j["data"]["iosIpaUrl"])
+if "data" in j:
+    data = j["data"]
+
+if isinstance(data, list):
+    data = data[0]
+
+if data["status"] == 1:
+    # print(r.text)
+    name = data["name"]
+    ipa_url = data["iosIpaUrl"]
+    if not (name and ipa_url):
+        exit(1)
+    print(f"{appid} = {name}")
+    print(ipa_url)
+else:
+    exit(1)
+
+r = requests.get(
+    f"https://www.ero-labs.com/api/getSingleHGame", params={**params, "id": appid}
+)
+if not r.ok:
+    exit()
+
+j = r.json()
+if "data" in j:
+    data = j["data"]
+
+if isinstance(data, list):
+    data = data[0]
+
+if data["status"] == 1:
+    for i in [
+        "android_demo_url",
+        "android_url",
+        "cloud_url",
+        "ios_ipa_demo_url",
+        "ios_testflight_url",
+        "mac_demo_url",
+        "mac_url",
+        "nox_url",
+        "webgl_url",
+        "windows_demo_url",
+        "windows_url",
+    ]:
+        if i in data and data[i] and "ldplayer" not in data[i]:
+            print(data[i].replace("?openExternalBrowser=1", ""))
